@@ -2,12 +2,13 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const dns = require('dns').promises;
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
-const app = express();
-app.use(express.json());
+const expressApp = express();
+expressApp.use(express.json());
 
-const server = http.createServer(app);
+const server = http.createServer(expressApp);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
@@ -22,17 +23,17 @@ if (KODIK_TOKEN) {
   console.log('❌ KODIK API TOKEN не найден');
 }
 
-app.use(express.static(path.join(__dirname, 'public')));
+expressApp.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
+expressApp.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/room/:roomId', (req, res) => {
+expressApp.get('/room/:roomId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
 });
 
-app.get('/room/:roomId/*', (req, res) => {
+expressApp.get('/room/:roomId/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
 });
 
@@ -303,7 +304,7 @@ async function fetchAnimeByKey(animeKey) {
   return results;
 }
 
-app.get('/api/health/kodik', async (req, res) => {
+expressApp.get('/api/health/kodik', async (req, res) => {
   try {
     const dnsOk = await checkHostAvailable('kodik-api.com');
     if (!dnsOk) {
@@ -330,7 +331,7 @@ app.get('/api/health/kodik', async (req, res) => {
   }
 });
 
-app.get('/api/yummy/search', async (req, res) => {
+expressApp.get('/api/yummy/search', async (req, res) => {
   try {
     if (!ensureKodikToken(res)) return;
 
@@ -372,7 +373,7 @@ app.get('/api/yummy/search', async (req, res) => {
   }
 });
 
-app.get('/api/yummy/anime/:animeUrl', async (req, res) => {
+expressApp.get('/api/yummy/anime/:animeUrl', async (req, res) => {
   try {
     if (!ensureKodikToken(res)) return;
 
@@ -408,7 +409,7 @@ app.get('/api/yummy/anime/:animeUrl', async (req, res) => {
   }
 });
 
-app.get('/api/yummy/anime-id/:animeId/videos', async (req, res) => {
+expressApp.get('/api/yummy/anime-id/:animeId/videos', async (req, res) => {
   try {
     if (!ensureKodikToken(res)) return;
 
@@ -426,15 +427,21 @@ app.get('/api/yummy/anime-id/:animeId/videos', async (req, res) => {
   }
 });
 
+function generateGuestKey() {
+  return crypto.randomBytes(12).toString('hex');
+}
+
 function ensureRoom(roomId) {
   if (!rooms[roomId]) {
     rooms[roomId] = {
       users: [],
+      creatorUserKey: null,
+      hostUserKey: null,
+      hostSocketId: null,
       videoState: {
         src: null,
         embedUrl: null,
         title: 'Ничего не выбрано',
-        hostId: null,
         animeId: null,
         animeUrl: null,
         episodeNumber: null,
@@ -457,8 +464,9 @@ function getEffectivePlayback(playback) {
     updatedAt: Date.now()
   };
 
-  let currentTime = safe.currentTime;
-  currentTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) ? currentTime : null;
+  let currentTime = typeof safe.currentTime === 'number' && !Number.isNaN(safe.currentTime)
+    ? safe.currentTime
+    : null;
 
   const paused = !!safe.paused;
   const updatedAt = Number(safe.updatedAt || Date.now()) || Date.now();
@@ -482,7 +490,7 @@ function getCurrentRoomState(roomId) {
     src: room.videoState.src,
     embedUrl: room.videoState.embedUrl,
     title: room.videoState.title,
-    hostId: room.videoState.hostId,
+    hostId: room.hostSocketId,
     animeId: room.videoState.animeId,
     animeUrl: room.videoState.animeUrl,
     episodeNumber: room.videoState.episodeNumber,
@@ -515,35 +523,77 @@ function getUsersWithMeta(roomId) {
 
   return room.users.map(user => ({
     ...user,
-    isHost: user.id === room.videoState.hostId
+    isHost: user.userKey === room.hostUserKey
   }));
 }
 
+function syncHostSocketByUserKey(room) {
+  if (!room?.hostUserKey) return;
+
+  const hostUser = room.users.find(user => user.userKey === room.hostUserKey);
+  room.hostSocketId = hostUser?.id || null;
+}
+
+function assignHostIfNeeded(room) {
+  if (!room) return;
+
+  if (room.creatorUserKey) {
+    const creatorStillHere = room.users.some(user => user.userKey === room.creatorUserKey);
+    if (creatorStillHere) {
+      room.hostUserKey = room.creatorUserKey;
+      syncHostSocketByUserKey(room);
+      return;
+    }
+  }
+
+  if (room.hostUserKey) {
+    const hostStillHere = room.users.some(user => user.userKey === room.hostUserKey);
+    if (hostStillHere) {
+      syncHostSocketByUserKey(room);
+      return;
+    }
+  }
+
+  if (room.users.length > 0) {
+    room.hostUserKey = room.users[0].userKey;
+    syncHostSocketByUserKey(room);
+  } else {
+    room.hostUserKey = null;
+    room.hostSocketId = null;
+  }
+}
+
 io.on('connection', (socket) => {
-  socket.on('join-room', ({ roomId, username }) => {
+  socket.on('join-room', ({ roomId, username, userKey }) => {
     if (!roomId) return;
 
     const room = ensureRoom(roomId);
+    const finalUserKey = userKey || generateGuestKey();
 
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.username = username || 'Гость';
+    socket.data.userKey = finalUserKey;
 
-    if (!room.videoState.hostId) {
-      room.videoState.hostId = socket.id;
+    room.users = room.users.filter(user => user.userKey !== finalUserKey);
+
+    room.users.push({
+      id: socket.id,
+      userKey: finalUserKey,
+      username: socket.data.username,
+      watchStatus: 'Не начал'
+    });
+
+    if (!room.creatorUserKey) {
+      room.creatorUserKey = finalUserKey;
     }
 
-    if (!room.users.some(user => user.id === socket.id)) {
-      room.users.push({
-        id: socket.id,
-        username: socket.data.username,
-        watchStatus: 'Не начал'
-      });
-    }
+    assignHostIfNeeded(room);
 
-    const isHostNow = room.videoState.hostId === socket.id;
+    const isHostNow = room.hostUserKey === finalUserKey;
 
     if (isHostNow) {
+      room.hostSocketId = socket.id;
       socket.emit('you-are-host');
     }
 
@@ -561,7 +611,7 @@ io.on('connection', (socket) => {
   socket.on('change-video', ({ roomId, videoSrc, embedUrl, title, animeId, animeUrl, episodeNumber }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (room.videoState.hostId !== socket.id) return;
+    if (room.hostUserKey !== socket.data.userKey) return;
 
     const state = switchToVideo(roomId, {
       videoSrc,
@@ -576,7 +626,7 @@ io.on('connection', (socket) => {
 
     room.users = room.users.map(user => ({
       ...user,
-      watchStatus: user.id === socket.id ? 'Смотрю' : 'Ожидает запуск'
+      watchStatus: user.userKey === socket.data.userKey ? 'Смотрю' : 'Ожидает запуск'
     }));
 
     io.to(roomId).emit('video-changed', state);
@@ -589,7 +639,7 @@ io.on('connection', (socket) => {
   socket.on('player-control', ({ roomId, action, currentTime }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (room.videoState.hostId !== socket.id) return;
+    if (room.hostUserKey !== socket.data.userKey) return;
 
     if (!room.videoState.playback) {
       room.videoState.playback = {
@@ -645,7 +695,7 @@ io.on('connection', (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    const user = room.users.find(u => u.id === socket.id);
+    const user = room.users.find(u => u.userKey === socket.data.userKey);
     if (!user) return;
 
     user.watchStatus = status || 'Неизвестно';
@@ -654,11 +704,14 @@ io.on('connection', (socket) => {
 
   socket.on('sync-request', ({ roomId }) => {
     const state = getCurrentRoomState(roomId);
-    if (!state) return;
+    const room = rooms[roomId];
+    if (!state || !room) return;
+
+    const isHostNow = room.hostUserKey === socket.data.userKey;
 
     socket.emit('sync-state', {
       ...state,
-      isHost: state.hostId === socket.id
+      isHost: isHostNow
     });
 
     socket.emit('system-message', {
@@ -685,20 +738,28 @@ io.on('connection', (socket) => {
 
     const room = rooms[roomId];
     const username = socket.data.username || 'Пользователь';
-    const wasHost = room.videoState.hostId === socket.id;
+    const disconnectUserKey = socket.data.userKey;
 
     room.users = room.users.filter(user => user.id !== socket.id);
 
-    if (wasHost && room.users.length > 0) {
-      room.videoState.hostId = room.users[0].id;
-      io.to(room.videoState.hostId).emit('you-are-host');
-      io.to(roomId).emit('system-message', {
-        text: `${username} вышел. Новый хост назначен автоматически`
-      });
-    } else if (room.users.length > 0) {
-      io.to(roomId).emit('system-message', {
-        text: `${username} покинул комнату`
-      });
+    assignHostIfNeeded(room);
+
+    const newHostUser = room.users.find(user => user.userKey === room.hostUserKey);
+
+    if (newHostUser && newHostUser.id) {
+      io.to(newHostUser.id).emit('you-are-host');
+    }
+
+    if (room.users.length > 0) {
+      if (room.creatorUserKey === disconnectUserKey) {
+        io.to(roomId).emit('system-message', {
+          text: `${username} вышел. Хост передан другому участнику`
+        });
+      } else {
+        io.to(roomId).emit('system-message', {
+          text: `${username} покинул комнату`
+        });
+      }
     }
 
     io.to(roomId).emit('room-users', getUsersWithMeta(roomId));

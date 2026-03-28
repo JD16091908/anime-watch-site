@@ -4,6 +4,25 @@ const params = new URLSearchParams(window.location.search);
 const username = params.get('username') || 'Гость';
 const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] || '');
 
+const USER_KEY_STORAGE_KEY = 'aniwatch_user_key';
+
+function generateUserKey() {
+  return `user_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function getOrCreateUserKey() {
+  let saved = localStorage.getItem(USER_KEY_STORAGE_KEY);
+
+  if (!saved) {
+    saved = generateUserKey();
+    localStorage.setItem(USER_KEY_STORAGE_KEY, saved);
+  }
+
+  return saved;
+}
+
+const userKey = getOrCreateUserKey();
+
 let isHost = false;
 let selectedAnime = null;
 let selectedPlayer = null;
@@ -26,7 +45,7 @@ let currentState = {
   duration: 0,
   playback: {
     paused: true,
-    currentTime: 0,
+    currentTime: null,
     updatedAt: 0
   }
 };
@@ -51,7 +70,6 @@ const statusButtons = document.querySelectorAll('.status-btn');
 const searchStatus = document.getElementById('searchStatus');
 const selectedAnimeInfo = document.getElementById('selectedAnimeInfo');
 const hostSearchHint = document.getElementById('hostSearchHint');
-
 const hostSyncPanel = document.getElementById('hostSyncPanel');
 
 if (roomTitle) {
@@ -286,41 +304,42 @@ function postKodikCommand(value) {
 function sendPlayToIframe() {
   if (bridge.playerType === 'kodik') {
     postKodikCommand({ method: 'play' });
-    return;
   }
 }
 
 function sendPauseToIframe() {
   if (bridge.playerType === 'kodik') {
     postKodikCommand({ method: 'pause' });
-    return;
   }
 }
 
 function sendSeekToIframe(time) {
   if (bridge.playerType === 'kodik') {
     postKodikCommand({ method: 'seek', seconds: Number(time) || 0 });
-    return;
   }
 }
 
 function requestKodikTime() {
-  if (bridge.playerType !== 'kodik') return;
-  postKodikCommand({ method: 'get_time' });
+  if (bridge.playerType === 'kodik') {
+    postKodikCommand({ method: 'get_time' });
+  }
 }
 
 function getLocalPlaybackSnapshot() {
   const playback = currentState.playback || {
     paused: true,
-    currentTime: 0,
+    currentTime: null,
     updatedAt: Date.now()
   };
 
-  let currentTime = Number(playback.currentTime || 0) || 0;
+  let currentTime = typeof playback.currentTime === 'number' && !Number.isNaN(playback.currentTime)
+    ? playback.currentTime
+    : null;
+
   const paused = !!playback.paused;
   const updatedAt = Number(playback.updatedAt || Date.now()) || Date.now();
 
-  if (!paused) {
+  if (currentTime !== null && !paused) {
     currentTime += (Date.now() - updatedAt) / 1000;
   }
 
@@ -341,23 +360,28 @@ function applyPlaybackState(playback, options = {}) {
     return;
   }
 
-  let targetTime = Number(playback.currentTime || 0);
+  let targetTime = playback.currentTime;
   const paused = typeof playback.paused === 'boolean' ? playback.paused : true;
   const updatedAt = Number(playback.updatedAt || 0) || 0;
 
-  if (Number.isNaN(targetTime)) return;
-  if (targetTime < 0.3 && !options.forceZero) return;
+  if (typeof targetTime !== 'number' || Number.isNaN(targetTime)) {
+    targetTime = null;
+  }
 
-  if (!paused && updatedAt) {
+  if (targetTime === null && !paused) return;
+  if (targetTime !== null && targetTime < 0.3 && !options.forceZero) return;
+
+  if (targetTime !== null && !paused && updatedAt) {
     targetTime += (Date.now() - updatedAt) / 1000;
   }
 
   const localSnapshot = getLocalPlaybackSnapshot();
-  const drift = Math.abs((localSnapshot.currentTime || 0) - targetTime);
+  const localTime = typeof localSnapshot.currentTime === 'number' ? localSnapshot.currentTime : 0;
+  const drift = targetTime === null ? 0 : Math.abs(localTime - targetTime);
 
   isRemoteAction = true;
 
-  if (drift > 1.2 || options.forceSeek) {
+  if (targetTime !== null && (drift > 1.2 || options.forceSeek)) {
     sendSeekToIframe(targetTime);
   }
 
@@ -618,7 +642,7 @@ function renderEpisodes(episodes) {
         duration: 0,
         playback: {
           paused: true,
-          currentTime: 0,
+          currentTime: null,
           updatedAt: Date.now()
         }
       };
@@ -796,7 +820,9 @@ window.addEventListener('message', (event) => {
           socket.emit('player-control', {
             roomId,
             action: 'play',
-            currentTime: currentState.playback.currentTime || 0
+            currentTime: typeof currentState.playback.currentTime === 'number'
+              ? currentState.playback.currentTime
+              : null
           });
         }
 
@@ -811,7 +837,9 @@ window.addEventListener('message', (event) => {
           socket.emit('player-control', {
             roomId,
             action: 'pause',
-            currentTime: currentState.playback.currentTime || 0
+            currentTime: typeof currentState.playback.currentTime === 'number'
+              ? currentState.playback.currentTime
+              : null
           });
         }
 
@@ -848,7 +876,11 @@ socket.on('connect', () => {
   sys(`SOCKET connected: ${socket.id}`);
 
   if (roomId !== 'solo') {
-    socket.emit('join-room', { roomId, username });
+    socket.emit('join-room', {
+      roomId,
+      username,
+      userKey
+    });
   } else {
     isHost = true;
     updateControlState();
@@ -891,7 +923,7 @@ socket.on('sync-state', (state) => {
     duration: currentState.duration || 0,
     playback: state.playback || {
       paused: true,
-      currentTime: 0,
+      currentTime: null,
       updatedAt: 0
     }
   };
@@ -899,7 +931,7 @@ socket.on('sync-state', (state) => {
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl, currentState.title);
 
-    if ((currentState.playback?.currentTime || 0) > 0.3) {
+    if (typeof currentState.playback?.currentTime === 'number' && currentState.playback.currentTime > 0.3) {
       pendingPlaybackApply = currentState.playback;
       applyPlaybackStateWhenReady(currentState.playback, 10, {
         forceSeek: true,
@@ -921,7 +953,7 @@ socket.on('video-changed', (state) => {
     duration: 0,
     playback: state.playback || {
       paused: true,
-      currentTime: 0,
+      currentTime: null,
       updatedAt: 0
     }
   };
@@ -937,8 +969,9 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
   if (roomId === 'solo') return;
   if (isHost) return;
 
-  const incomingTime = Number(currentTime);
-  const safeTime = !Number.isNaN(incomingTime) ? incomingTime : null;
+  const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
+    ? currentTime
+    : null;
 
   if (safeTime !== null && safeTime < 0.3 && action !== 'seek') {
     return;
@@ -946,7 +979,7 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
 
   currentState.playback = {
     paused: typeof paused === 'boolean' ? paused : action === 'pause',
-    currentTime: safeTime ?? currentState.playback.currentTime ?? 0,
+    currentTime: safeTime ?? currentState.playback.currentTime ?? null,
     updatedAt: Number(updatedAt || Date.now()) || Date.now()
   };
 
