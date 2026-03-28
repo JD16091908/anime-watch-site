@@ -32,6 +32,10 @@ app.get('/room/:roomId', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
 });
 
+app.get('/room/:roomId/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'room.html'));
+});
+
 async function checkHostAvailable(hostname) {
   try {
     const result = await dns.lookup(hostname);

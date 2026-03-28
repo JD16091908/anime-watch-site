@@ -2,7 +2,7 @@ const socket = io();
 
 const params = new URLSearchParams(window.location.search);
 const username = params.get('username') || 'Гость';
-const roomId = window.location.pathname.split('/room/')[1];
+const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] || '');
 
 let isHost = false;
 let selectedAnime = null;
@@ -899,11 +899,17 @@ if (syncBtn) {
 
 if (copyLinkBtn) {
   copyLinkBtn.addEventListener('click', async () => {
+    const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}?username=${encodeURIComponent(username)}`;
+
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(inviteUrl);
       sys('Ссылка на комнату скопирована');
     } catch {
-      sys('Не удалось скопировать ссылку');
+      try {
+        window.prompt('Скопируйте ссылку вручную:', inviteUrl);
+      } catch {
+        sys('Не удалось скопировать ссылку');
+      }
     }
   });
 }
