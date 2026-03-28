@@ -44,8 +44,11 @@ input {
   font: inherit;
 }
 
-.hidden {
+.hidden,
+[hidden] {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* ===== Main page ===== */
@@ -795,6 +798,7 @@ input::placeholder {
     font-size: 16px;
   }
 }
+
 .alloha-test-panel {
   margin-bottom: 14px;
   padding: 14px;
@@ -815,6 +819,7 @@ input::placeholder {
   flex-wrap: wrap;
   gap: 10px;
 }
+
 .alloha-panel {
   margin-bottom: 14px;
   padding: 14px;
@@ -848,12 +853,9 @@ input::placeholder {
   flex-wrap: wrap;
   gap: 10px;
 }
+
 .host-sync-panel {
-  margin-bottom: 14px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(36, 50, 80, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: none !important;
 }
 
 .host-sync-buttons {

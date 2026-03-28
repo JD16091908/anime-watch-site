@@ -440,7 +440,7 @@ function ensureRoom(roomId) {
         episodeNumber: null,
         playback: {
           paused: true,
-          currentTime: 0,
+          currentTime: null,
           updatedAt: Date.now()
         }
       }
@@ -453,15 +453,17 @@ function ensureRoom(roomId) {
 function getEffectivePlayback(playback) {
   const safe = playback || {
     paused: true,
-    currentTime: 0,
+    currentTime: null,
     updatedAt: Date.now()
   };
 
-  let currentTime = Number(safe.currentTime || 0) || 0;
+  let currentTime = safe.currentTime;
+  currentTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) ? currentTime : null;
+
   const paused = !!safe.paused;
   const updatedAt = Number(safe.updatedAt || Date.now()) || Date.now();
 
-  if (!paused) {
+  if (currentTime !== null && !paused) {
     currentTime += (Date.now() - updatedAt) / 1000;
   }
 
@@ -500,7 +502,7 @@ function switchToVideo(roomId, payload) {
   room.videoState.episodeNumber = payload.episodeNumber ?? null;
   room.videoState.playback = {
     paused: true,
-    currentTime: 0,
+    currentTime: null,
     updatedAt: Date.now()
   };
 
@@ -592,22 +594,44 @@ io.on('connection', (socket) => {
     if (!room.videoState.playback) {
       room.videoState.playback = {
         paused: true,
-        currentTime: 0,
+        currentTime: null,
         updatedAt: Date.now()
       };
     }
 
-    if (typeof currentTime === 'number' && !Number.isNaN(currentTime)) {
-      room.videoState.playback.currentTime = currentTime;
+    const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
+      ? currentTime
+      : null;
+
+    if (action === 'seek') {
+      if (safeTime !== null) {
+        room.videoState.playback.currentTime = safeTime;
+        room.videoState.playback.updatedAt = Date.now();
+      }
     }
 
     if (action === 'play') {
       room.videoState.playback.paused = false;
+
+      if (safeTime !== null && safeTime > 0.3) {
+        room.videoState.playback.currentTime = safeTime;
+      }
+
+      room.videoState.playback.updatedAt = Date.now();
     } else if (action === 'pause') {
       room.videoState.playback.paused = true;
-    }
 
-    room.videoState.playback.updatedAt = Date.now();
+      if (safeTime !== null && safeTime > 0.3) {
+        room.videoState.playback.currentTime = safeTime;
+      }
+
+      room.videoState.playback.updatedAt = Date.now();
+    } else if (action === 'timeupdate') {
+      if (safeTime !== null && safeTime > 0.3) {
+        room.videoState.playback.currentTime = safeTime;
+        room.videoState.playback.updatedAt = Date.now();
+      }
+    }
 
     socket.to(roomId).emit('player-control', {
       action,
