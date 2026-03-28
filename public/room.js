@@ -11,6 +11,7 @@ let searchDebounce = null;
 let lastSearchResults = [];
 let pendingPlaybackApply = null;
 let isRemoteAction = false;
+let userInteractedWithPlayer = false;
 
 let hostAutoSyncTimer = null;
 let viewerAutoSyncTimer = null;
@@ -195,6 +196,18 @@ function showPlaceholder(title = 'Ничего не выбрано', description
   resetBridge();
 }
 
+function showViewerSyncHint() {
+  if (isHost || roomId === 'solo' || !placeholder) return;
+
+  placeholder.style.display = 'flex';
+  placeholder.innerHTML = `
+    <div>
+      <h2>Серия загружена</h2>
+      <p>Если видео не стартовало автоматически, кликните по плееру один раз — после этого синхронизация будет работать лучше.</p>
+    </div>
+  `;
+}
+
 function createFreshIframe(embedUrl) {
   const oldFrame = document.getElementById('videoFrame');
   if (oldFrame) oldFrame.remove();
@@ -232,15 +245,13 @@ function detectPlayerType(embedUrl) {
 
 let bridge = {
   playerType: 'unknown',
-  iframeWindow: null,
-  iframeOrigin: '*'
+  iframeWindow: null
 };
 
 function resetBridge() {
   bridge = {
     playerType: 'unknown',
-    iframeWindow: null,
-    iframeOrigin: '*'
+    iframeWindow: null
   };
 }
 
@@ -252,13 +263,6 @@ function ensureBridgeWindow() {
   const iframe = getIframeElement();
   if (iframe?.contentWindow) {
     bridge.iframeWindow = iframe.contentWindow;
-    try {
-      const src = iframe.getAttribute('src') || '';
-      const url = new URL(src, window.location.origin);
-      bridge.iframeOrigin = url.origin;
-    } catch {
-      bridge.iframeOrigin = '*';
-    }
   }
 }
 
@@ -288,7 +292,6 @@ function sendPlayToIframe() {
     return;
   }
 
-  postToIframe(JSON.stringify({ event: 'play' }));
   postToIframe({ event: 'play' });
 }
 
@@ -298,7 +301,6 @@ function sendPauseToIframe() {
     return;
   }
 
-  postToIframe(JSON.stringify({ event: 'pause' }));
   postToIframe({ event: 'pause' });
 }
 
@@ -308,7 +310,6 @@ function sendSeekToIframe(time) {
     return;
   }
 
-  postToIframe(JSON.stringify({ event: 'seek', time }));
   postToIframe({ event: 'seek', time });
 }
 
@@ -361,17 +362,19 @@ function applyPlaybackState(playback) {
 
   sendSeekToIframe(targetTime);
 
-  setTimeout(() => {
-    if (paused) {
-      sendPauseToIframe();
+  if (paused) {
+    setTimeout(() => sendPauseToIframe(), 120);
+  } else {
+    if (isHost || roomId === 'solo' || userInteractedWithPlayer) {
+      setTimeout(() => sendPlayToIframe(), 120);
     } else {
-      sendPlayToIframe();
+      showViewerSyncHint();
     }
-  }, 120);
+  }
 
   setTimeout(() => {
     isRemoteAction = false;
-  }, 1200);
+  }, 1000);
 }
 
 function applyPlaybackStateWhenReady(playback, attempts = 12) {
@@ -428,6 +431,14 @@ function loadIframe(embedUrl, title) {
 
     if (pendingPlaybackApply) {
       setTimeout(() => applyPlaybackStateWhenReady(pendingPlaybackApply), 1200);
+    }
+
+    if (!isHost && roomId !== 'solo') {
+      setTimeout(() => {
+        if (!userInteractedWithPlayer) {
+          showViewerSyncHint();
+        }
+      }, 1800);
     }
   });
 }
@@ -605,6 +616,7 @@ function renderEpisodes(episodes) {
         }
       };
 
+      userInteractedWithPlayer = canControl();
       loadIframe(embedUrl, title);
       renderEpisodes(getUniqueEpisodes(videos));
 
@@ -779,6 +791,14 @@ function stopAutoSyncLoops() {
   stopKodikTimePolling();
 }
 
+window.addEventListener('pointerdown', () => {
+  userInteractedWithPlayer = true;
+}, { once: false });
+
+window.addEventListener('keydown', () => {
+  userInteractedWithPlayer = true;
+}, { once: false });
+
 window.addEventListener('message', (event) => {
   try {
     const payload = event.data;
@@ -790,9 +810,16 @@ window.addEventListener('message', (event) => {
       const value = payload.value;
 
       if (key === 'kodik_player_time_update') {
-        const seconds = Number(value) || 0;
-        currentState.playback.currentTime = seconds;
-        currentState.playback.updatedAt = Date.now();
+        const seconds = typeof value === 'number'
+          ? value
+          : typeof value === 'string'
+            ? Number(value)
+            : Number(value?.time);
+
+        if (!Number.isNaN(seconds)) {
+          currentState.playback.currentTime = seconds;
+          currentState.playback.updatedAt = Date.now();
+        }
       }
 
       if (key === 'kodik_player_duration_update') {
