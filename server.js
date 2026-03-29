@@ -454,7 +454,7 @@ function getUsersWithMeta(roomId) {
 
   return room.users.map(u => ({
     ...u,
-    isHost: u.userKey === room.hostUserKey
+    isHost: u.id === room.hostSocketId
   }));
 }
 
@@ -469,7 +469,6 @@ io.on('connection', (socket) => {
     socket.data.username = username || 'Гость';
     socket.data.userKey = userKey;
 
-    room.users = room.users.filter(u => u.userKey !== userKey);
     room.users.push({
       id: socket.id,
       userKey,
@@ -485,7 +484,7 @@ io.on('connection', (socket) => {
 
     resolveHost(room);
 
-    const isHostNow = room.hostUserKey === userKey;
+    const isHostNow = room.hostSocketId === socket.id;
     if (isHostNow) {
       socket.emit('you-are-host');
     }
@@ -503,7 +502,7 @@ io.on('connection', (socket) => {
 
   socket.on('change-video', ({ roomId, embedUrl, title, animeId, animeUrl, episodeNumber }) => {
     const room = rooms[roomId];
-    if (!room || room.hostUserKey !== socket.data.userKey) return;
+    if (!room || room.hostSocketId !== socket.id) return;
 
     room.videoState.embedUrl = embedUrl || null;
     room.videoState.title = title || 'Без названия';
@@ -530,7 +529,7 @@ io.on('connection', (socket) => {
 
   socket.on('player-control', ({ roomId, action, currentTime }) => {
     const room = rooms[roomId];
-    if (!room || room.hostUserKey !== socket.data.userKey) return;
+    if (!room || room.hostSocketId !== socket.id) return;
 
     const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
       ? currentTime
@@ -580,7 +579,7 @@ io.on('connection', (socket) => {
       ? currentTime
       : null;
 
-    const user = room.users.find(u => u.userKey === socket.data.userKey);
+    const user = room.users.find(u => u.id === socket.id);
     if (!user) return;
 
     user.currentTime = safeTime;
@@ -593,7 +592,7 @@ io.on('connection', (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    const user = room.users.find(u => u.userKey === socket.data.userKey);
+    const user = room.users.find(u => u.id === socket.id);
     if (user) {
       user.watchStatus = status || 'Неизвестно';
     }
