@@ -39,6 +39,7 @@ async function kodikGet(endpoint, params = {}) {
 
   const url = `${KODIK_API_BASE}${endpoint}?${new URLSearchParams({
     token: KODIK_TOKEN,
+    limit: '1000',
     ...params
   }).toString()}`;
 
@@ -397,43 +398,6 @@ function dedupeResults(items) {
   return [...map.values()];
 }
 
-function summarizeItem(item) {
-  return {
-    id: item?.id ?? null,
-    shikimori_id: getShikimoriId(item),
-    translation_id: item?.translation?.id ?? null,
-    translation_title: item?.translation?.title || item?.translation?.name || '',
-    title: normalizeTitle(item),
-    year: normalizeYear(item),
-    type: normalizeType(item),
-    season: item?.season ?? item?.material_data?.season ?? null,
-    episode: item?.episode ?? null,
-    last_episode: item?.last_episode ?? item?.material_data?.last_episode ?? null,
-    episodes_keys_count: item?.episodes && typeof item.episodes === 'object' ? Object.keys(item.episodes).length : 0,
-    seasons_count: item?.seasons && typeof item.seasons === 'object' ? Object.keys(item.seasons).length : 0,
-    has_link: !!item?.link,
-    link_sample: item?.link ? String(item.link).slice(0, 120) : null
-  };
-}
-
-function selectBestAnimeCard(items) {
-  if (!items.length) return null;
-
-  const sorted = [...items].sort((a, b) => {
-    const aEpisodes = extractEpisodesFromItem(a).length;
-    const bEpisodes = extractEpisodesFromItem(b).length;
-    if (bEpisodes !== aEpisodes) return bEpisodes - aEpisodes;
-
-    const aHasPoster = normalizePoster(a) ? 1 : 0;
-    const bHasPoster = normalizePoster(b) ? 1 : 0;
-    if (bHasPoster !== aHasPoster) return bHasPoster - aHasPoster;
-
-    return String(normalizeTitle(a)).localeCompare(String(normalizeTitle(b)), 'ru');
-  });
-
-  return sorted[0];
-}
-
 async function fetchAnimeByKey(animeKey) {
   const colonIndex = animeKey.indexOf(':');
   const kind = colonIndex > -1 ? animeKey.slice(0, colonIndex) : '';
@@ -480,23 +444,6 @@ async function fetchAnimeByKey(animeKey) {
       ...(Array.isArray(byList?.results) ? byList.results : [])
     ];
 
-    const first = combined[0];
-    const shikimoriId = getShikimoriId(first);
-
-    if (shikimoriId) {
-      const related = await kodikGet('/list', {
-        shikimori_id: shikimoriId,
-        with_material_data: 'true',
-        with_episodes: 'true',
-        types: 'anime-serial,anime'
-      });
-
-      combined = [
-        ...combined,
-        ...(Array.isArray(related?.results) ? related.results : [])
-      ];
-    }
-
     return filterAnimeResults(combined);
   }
 
@@ -533,23 +480,6 @@ async function fetchAnimeByKey(animeKey) {
     ...(Array.isArray(searchData?.results) ? searchData.results : []),
     ...(Array.isArray(listData?.results) ? listData.results : [])
   ];
-
-  const first = results[0];
-  const shikimoriId = getShikimoriId(first);
-
-  if (shikimoriId) {
-    const related = await kodikGet('/list', {
-      shikimori_id: shikimoriId,
-      with_material_data: 'true',
-      with_episodes: 'true',
-      types: 'anime-serial,anime'
-    });
-
-    results = [
-      ...results,
-      ...(Array.isArray(related?.results) ? related.results : [])
-    ];
-  }
 
   return filterAnimeResults(results);
 }
@@ -617,29 +547,26 @@ app.get('/api/yummy/anime/:animeUrl', async (req, res) => {
       return res.status(404).json({ error: 'Аниме не найдено' });
     }
 
-    const first = selectBestAnimeCard(results) || results[0];
+    const colonIndex = animeUrl.indexOf(':');
+    const kind = colonIndex > -1 ? animeUrl.slice(0, colonIndex) : '';
+    const value = colonIndex > -1 ? animeUrl.slice(colonIndex + 1) : animeUrl;
+
+    let first;
+
+    if (kind === 'shikimori' || kind === 'kodik') {
+      first = results.find(r => {
+        if (kind === 'shikimori') return String(getShikimoriId(r)) === value;
+        if (kind === 'kodik') return String(getKodikId(r)) === value;
+        return false;
+      }) || results[0];
+    } else {
+      first = results[0];
+    }
+
     const animeId = getStableAnimeId(first) || makeAnimeKey(first);
     const videos = mergeEpisodes(results);
 
-    const lowerTitle = normalizeSearchText(normalizeTitle(first));
-    const shouldLogDebug =
-      lowerTitle.includes('one piece') ||
-      lowerTitle.includes('ван пис') ||
-      lowerTitle.includes('hunter x hunter') ||
-      lowerTitle.includes('охотник х охотник');
-
-    if (shouldLogDebug) {
-      console.log('\n========== DEBUG ANIME ==========');
-      console.log('animeUrl:', animeUrl);
-      console.log('selected title:', normalizeTitle(first));
-      console.log('results count:', results.length);
-      console.log('videos count:', videos.length);
-      console.log('sample results summary:');
-      console.dir(results.slice(0, 20).map(summarizeItem), { depth: null });
-      console.log('sample videos summary:');
-      console.dir(videos.slice(0, 20), { depth: 2 });
-      console.log('=================================\n');
-    }
+    console.log(`[Anime Load] ${normalizeTitle(first)} | Results: ${results.length} | Videos: ${videos.length}`);
 
     res.json({
       animeId,
@@ -656,28 +583,6 @@ app.get('/api/yummy/anime/:animeUrl', async (req, res) => {
   } catch (error) {
     console.error('ANIME ERROR:', error.message);
     res.status(500).json({ error: 'Не удалось загрузить аниме', details: error.message });
-  }
-});
-
-app.get('/api/debug/anime/:animeUrl', async (req, res) => {
-  try {
-    const animeUrl = decodeURIComponent(req.params.animeUrl);
-    let results = await fetchAnimeByKey(animeUrl);
-    results = dedupeResults(results);
-
-    const merged = mergeEpisodes(results);
-
-    res.json({
-      animeUrl,
-      count: results.length,
-      mergedVideosCount: merged.length,
-      results: results.map(summarizeItem),
-      mergedVideos: merged.slice(0, 100)
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: error.message
-    });
   }
 });
 
