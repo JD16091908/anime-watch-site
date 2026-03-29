@@ -87,6 +87,21 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+async function readJsonSafely(response) {
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text();
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Сервер вернул не JSON. Проверь деплой API маршрутов. HTTP ${response.status}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Сервер вернул битый JSON');
+  }
+}
+
 function normalizeUrl(url) {
   if (!url) return url;
   if (url.startsWith('//')) return `https:${url}`;
@@ -673,7 +688,7 @@ async function searchAnime(query) {
 
   try {
     const response = await fetch(`/api/yummy/search?q=${encodeURIComponent(rawQuery)}`);
-    const data = await response.json();
+    const data = await readJsonSafely(response);
 
     if (token !== latestSearchToken) return;
     if (!response.ok) throw new Error(data?.error || 'Ошибка поиска');
@@ -711,7 +726,8 @@ async function selectAnime(itemOrAnimeUrl) {
     const response = await fetch('/api/yummy/anime/by-selection', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         animeUrl: selectedItem.animeUrl,
@@ -723,7 +739,7 @@ async function selectAnime(itemOrAnimeUrl) {
       })
     });
 
-    const data = await response.json();
+    const data = await readJsonSafely(response);
 
     if (!response.ok) throw new Error(data?.error || 'Не удалось загрузить аниме');
 

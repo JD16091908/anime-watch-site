@@ -19,9 +19,10 @@ const KODIK_API_BASE = 'https://kodik-api.com';
 console.log(KODIK_TOKEN ? '✅ KODIK TOKEN загружен' : '❌ KODIK TOKEN не найден');
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/room/:roomId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
-app.get('/room/:roomId/*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
+
+function isApiRequest(req) {
+  return req.path.startsWith('/api/');
+}
 
 async function checkHostAvailable(hostname) {
   try {
@@ -132,9 +133,21 @@ function normalizeSearchText(value) {
     .trim();
 }
 
+function normalizeTitleKey(value) {
+  return normalizeSearchText(value)
+    .replace(/\b(tv|тв|movie|film|ova|ona|special|sp)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function isAllowedAnimeType(item) {
   const type = String(normalizeType(item) || '').toLowerCase();
   return type === 'anime' || type === 'anime-serial' || type.includes('anime');
+}
+
+function isSerial(item) {
+  const type = String(normalizeType(item) || '').toLowerCase();
+  return type.includes('serial');
 }
 
 function titleScore(item, query) {
@@ -162,6 +175,8 @@ function titleScore(item, query) {
   const y = String(normalizeYear(item) || '');
   if (qYear && y === qYear) score += 1000;
 
+  if (isSerial(item)) score += 400;
+
   return score;
 }
 
@@ -170,6 +185,7 @@ function makeSearchItem(item, query) {
     animeId: getStableAnimeId(item) || `kodik:${getKodikId(item) || 'unknown'}`,
     animeUrl: String(getStableAnimeId(item) || `kodik:${getKodikId(item) || 'unknown'}`),
     title: normalizeTitle(item),
+    titleKey: normalizeTitleKey(normalizeTitle(item)),
     year: normalizeYear(item),
     description: normalizeDescription(item),
     poster: normalizePoster(item),
@@ -177,27 +193,51 @@ function makeSearchItem(item, query) {
     type: normalizeType(item),
     shikimoriId: getShikimoriId(item),
     kodikId: getKodikId(item),
-    score: titleScore(item, query)
+    score: titleScore(item, query),
+    serialPriority: isSerial(item) ? 1 : 0
   };
 }
 
-function dedupeSearchResults(items) {
-  const map = new Map();
+function dedupeSearchResults(items, query) {
+  const queryKey = normalizeTitleKey(query);
+  const strictMap = new Map();
 
   for (const item of items) {
-    const key = [
-      item.shikimoriId || '',
-      item.kodikId || '',
-      normalizeSearchText(item.title),
-      item.year || ''
-    ].join('|');
+    const itemKey = item.titleKey || normalizeTitleKey(item.title);
+    const year = String(item.year || '');
+    const groupKey = `${itemKey}|${year}`;
 
-    if (!map.has(key) || map.get(key).score < item.score) {
-      map.set(key, item);
+    const goodMatch =
+      itemKey === queryKey ||
+      itemKey.includes(queryKey) ||
+      queryKey.includes(itemKey);
+
+    if (!goodMatch) continue;
+
+    const existing = strictMap.get(groupKey);
+    if (!existing) {
+      strictMap.set(groupKey, item);
+      continue;
+    }
+
+    const currentRank =
+      item.score +
+      (item.serialPriority ? 800 : 0) +
+      (item.poster ? 50 : 0) +
+      (item.description ? 20 : 0);
+
+    const existingRank =
+      existing.score +
+      (existing.serialPriority ? 800 : 0) +
+      (existing.poster ? 50 : 0) +
+      (existing.description ? 20 : 0);
+
+    if (currentRank > existingRank) {
+      strictMap.set(groupKey, item);
     }
   }
 
-  return [...map.values()];
+  return [...strictMap.values()];
 }
 
 function buildEpisodeIframe(link) {
@@ -484,12 +524,16 @@ app.get('/api/yummy/search', async (req, res) => {
       .map(item => makeSearchItem(item, query))
       .filter(item => item.score >= 1200);
 
-    const finalResults = dedupeSearchResults(mapped)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 20)
-      .map(({ score, ...item }) => item);
+    const deduped = dedupeSearchResults(mapped, query)
+      .sort((a, b) => {
+        const aRank = a.score + (a.serialPriority ? 800 : 0);
+        const bRank = b.score + (b.serialPriority ? 800 : 0);
+        return bRank - aRank;
+      })
+      .slice(0, 10)
+      .map(({ score, serialPriority, titleKey, ...item }) => item);
 
-    res.json(finalResults);
+    res.json(deduped);
   } catch (error) {
     console.error('SEARCH ERROR:', error.message);
     res.status(500).json({ error: 'Не удалось выполнить поиск', details: error.message });
@@ -535,6 +579,30 @@ app.post('/api/yummy/anime/by-selection', async (req, res) => {
     console.error('ANIME BY SELECTION ERROR:', error.message);
     res.status(500).json({ error: 'Не удалось загрузить аниме', details: error.message });
   }
+});
+
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/room/:roomId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
+app.get('/room/:roomId/*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
+
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    error: 'API route not found',
+    method: req.method,
+    path: req.originalUrl
+  });
+});
+
+app.use((req, res) => {
+  if (isApiRequest(req)) {
+    return res.status(404).json({
+      error: 'API route not found',
+      method: req.method,
+      path: req.originalUrl
+    });
+  }
+
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 function ensureRoom(roomId) {
