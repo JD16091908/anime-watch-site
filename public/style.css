@@ -570,8 +570,10 @@ input::placeholder {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 14px;
+  margin-bottom: 24px;
   align-items: flex-start;
   padding-top: 4px;
+  padding-bottom: 2px;
 }
 
 .episode-tile {
@@ -609,12 +611,22 @@ input::placeholder {
   transform: none;
 }
 
+.selector-block {
+  display: flex;
+  flex-direction: column;
+}
+
 .selector-block + .selector-block {
   margin-top: 18px;
 }
 
+.selector-block h2 {
+  margin-bottom: 10px;
+}
+
 #episodesList {
   padding-top: 4px;
+  padding-bottom: 8px;
 }
 
 .player-panel {
@@ -622,14 +634,20 @@ input::placeholder {
 }
 
 .now-playing-bar {
-  margin-bottom: 16px;
-  padding: 14px 16px;
+  margin-top: 22px;
+  margin-bottom: 20px;
+  padding: 16px 18px;
   font-size: 16px;
   font-weight: 700;
   color: #fff;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #343434;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.now-playing-bar + .player-shell {
+  margin-top: 6px;
 }
 
 .player-shell {
@@ -1125,5 +1143,12 @@ input::placeholder {
 
   .episodes-grid {
     gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .now-playing-bar {
+    margin-top: 18px;
+    margin-bottom: 18px;
+    padding: 14px 16px;
   }
 }
