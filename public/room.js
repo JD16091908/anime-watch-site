@@ -133,11 +133,24 @@ function getIframeUrl(video) {
   return video?.iframeUrl || video?.iframe_url || null;
 }
 
+function sortSearchResults(items) {
+  return [...(items || [])].sort((a, b) => {
+    const yearA = Number(a?.year) || 9999;
+    const yearB = Number(b?.year) || 9999;
+
+    if (yearA !== yearB) return yearA - yearB;
+
+    return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
+  });
+}
+
 function getUniquePlayers(videos) {
   const map = new Map();
+
   for (const video of videos || []) {
     const iframeUrl = getIframeUrl(video);
     if (!iframeUrl) continue;
+
     const name = getPlayerName(video);
     if (!map.has(name)) {
       map.set(name, { name, count: 1 });
@@ -145,7 +158,11 @@ function getUniquePlayers(videos) {
       map.get(name).count += 1;
     }
   }
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+  return [...map.values()].sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.name.localeCompare(b.name, 'ru');
+  });
 }
 
 function getVideosBySelectedPlayer(videos) {
@@ -527,8 +544,9 @@ function renderAnimeResults(items) {
     return;
   }
 
-  const visibleItems = showAllSearchResults ? items : items.slice(0, 5);
-  const needToggle = items.length > 5;
+  const sortedItems = sortSearchResults(items);
+  const visibleItems = showAllSearchResults ? sortedItems : sortedItems.slice(0, 5);
+  const needToggle = sortedItems.length > 5;
 
   animeList.innerHTML = `
     ${visibleItems.map((item, index) => `
@@ -557,7 +575,8 @@ function renderAnimeResults(items) {
   animeList.querySelectorAll('.search-result-item').forEach(btn => {
     btn.disabled = !canControl();
     btn.addEventListener('click', async () => {
-      const visibleNow = showAllSearchResults ? lastSearchResults : lastSearchResults.slice(0, 5);
+      const sortedNow = sortSearchResults(lastSearchResults);
+      const visibleNow = showAllSearchResults ? sortedNow : sortedNow.slice(0, 5);
       const index = Number(btn.dataset.index);
       const item = visibleNow[index];
       if (!item) return;
@@ -693,7 +712,7 @@ async function searchAnime(query) {
     if (token !== latestSearchToken) return;
     if (!response.ok) throw new Error(data?.error || 'Ошибка поиска');
 
-    lastSearchResults = Array.isArray(data) ? data : [];
+    lastSearchResults = sortSearchResults(Array.isArray(data) ? data : []);
     renderAnimeResults(lastSearchResults);
 
     if (searchStatus) {
