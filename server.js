@@ -105,17 +105,13 @@ function normalizeStatus(item) {
   return item?.material_data?.anime_status || item?.status || '';
 }
 
-function makeAnimeKey(item) {
+function getStableAnimeId(item) {
   const shikimoriId = item?.shikimori_id || item?.material_data?.shikimori_id;
-  const kinopoiskId = item?.kinopoisk_id || item?.material_data?.kinopoisk_id;
-  const imdbId = item?.imdb_id || item?.material_data?.imdb_id;
-  const title = normalizeTitle(item);
-  const year = normalizeYear(item);
+  const kodikId = item?.id || item?.kodik_id || null;
 
   if (shikimoriId) return `shikimori:${shikimoriId}`;
-  if (kinopoiskId) return `kinopoisk:${kinopoiskId}`;
-  if (imdbId) return `imdb:${imdbId}`;
-  return `title:${String(title).toLowerCase()}::${year}`;
+  if (kodikId) return `kodik:${kodikId}`;
+  return null;
 }
 
 function normalizeSearchText(value) {
@@ -127,35 +123,35 @@ function normalizeSearchText(value) {
     .trim();
 }
 
+function isAllowedAnimeType(item) {
+  const type = String(normalizeType(item) || '').toLowerCase();
+  return type === 'anime' || type === 'anime-serial' || type.includes('anime');
+}
+
 function scoreSearchItem(item, query) {
   const q = normalizeSearchText(query);
   const title = normalizeSearchText(normalizeTitle(item));
   const type = String(normalizeType(item) || '').toLowerCase();
 
   if (!q || !title) return 0;
+  if (!isAllowedAnimeType(item)) return -10000;
 
   let score = 0;
 
-  if (title === q) score += 1000;
-  else if (title.startsWith(q)) score += 700;
-  else if (title.includes(q)) score += 400;
+  if (title === q) score += 5000;
+  else if (title.startsWith(q)) score += 2500;
+  else if (title.includes(q)) score += 1200;
 
-  const qWords = q.split(' ').filter(Boolean);
-  for (const word of qWords) {
-    if (title.startsWith(word)) score += 120;
-    else if (title.includes(word)) score += 70;
+  const words = q.split(' ').filter(Boolean);
+  for (const word of words) {
+    if (title.startsWith(word)) score += 250;
+    else if (title.includes(word)) score += 120;
   }
 
-  if (type.includes('anime-serial')) score += 40;
-  else if (type.includes('anime')) score += 20;
-  else score -= 300;
+  if (type === 'anime-serial') score += 300;
+  if (type === 'anime') score += 150;
 
   return score;
-}
-
-function isAllowedAnimeType(item) {
-  const type = String(normalizeType(item) || '').toLowerCase();
-  return type.includes('anime');
 }
 
 function mapSearchResults(results, query = '') {
@@ -164,15 +160,16 @@ function mapSearchResults(results, query = '') {
   for (const item of results || []) {
     if (!isAllowedAnimeType(item)) continue;
 
-    const key = makeAnimeKey(item);
-    const score = scoreSearchItem(item, query);
+    const animeId = getStableAnimeId(item);
+    if (!animeId) continue;
 
+    const score = scoreSearchItem(item, query);
     if (score <= 0) continue;
 
-    if (!grouped.has(key)) {
-      grouped.set(key, {
-        animeId: key,
-        animeUrl: key,
+    if (!grouped.has(animeId)) {
+      grouped.set(animeId, {
+        animeId,
+        animeUrl: animeId,
         title: normalizeTitle(item),
         year: normalizeYear(item),
         description: normalizeDescription(item),
@@ -182,11 +179,11 @@ function mapSearchResults(results, query = '') {
         _score: score
       });
     } else {
-      const existing = grouped.get(key);
+      const existing = grouped.get(animeId);
       if (score > existing._score) {
-        grouped.set(key, {
-          animeId: key,
-          animeUrl: key,
+        grouped.set(animeId, {
+          animeId,
+          animeUrl: animeId,
           title: normalizeTitle(item),
           year: normalizeYear(item),
           description: normalizeDescription(item),
@@ -261,71 +258,46 @@ function extractEpisodesFromResults(items) {
   });
 }
 
-async function fetchAnimeByKey(animeKey) {
-  const baseParams = {
-    with_material_data: 'true'
-  };
+async function fetchAnimeByStableId(animeId) {
+  const [kind, rawValue] = String(animeId || '').split(':');
+  const value = String(rawValue || '').trim();
 
-  const colonIndex = animeKey.indexOf(':');
-  const kind = colonIndex > -1 ? animeKey.slice(0, colonIndex) : '';
-  const value = colonIndex > -1 ? animeKey.slice(colonIndex + 1) : animeKey;
+  if (!kind || !value) return [];
 
   if (kind === 'shikimori') {
-    baseParams.shikimori_id = value;
-  } else if (kind === 'kinopoisk') {
-    baseParams.kinopoisk_id = value;
-  } else if (kind === 'imdb') {
-    baseParams.imdb_id = value;
-  } else if (kind === 'title') {
-    const [titlePart, yearPart] = value.split('::');
-    baseParams.title = titlePart || '';
-    if (yearPart) baseParams.year = yearPart;
-  } else {
-    baseParams.title = animeKey;
-  }
-
-  const titleData = await kodikGet('/search', {
-    ...baseParams,
-    types: 'anime-serial,anime'
-  });
-
-  const titleResults = Array.isArray(titleData?.results) ? titleData.results : [];
-  if (!titleResults.length) return [];
-
-  const first = titleResults[0];
-  const shikimoriId = first?.shikimori_id || first?.material_data?.shikimori_id;
-
-  let episodeResults = [];
-
-  if (shikimoriId) {
-    const episodesData = await kodikGet('/list', {
-      shikimori_id: shikimoriId,
+    const data = await kodikGet('/list', {
+      shikimori_id: value,
       with_material_data: 'true',
       types: 'anime-serial,anime'
     });
 
-    episodeResults = Array.isArray(episodesData?.results) ? episodesData.results : [];
+    return Array.isArray(data?.results) ? data.results : [];
   }
 
-  if (!episodeResults.length) {
-    const title = normalizeTitle(first);
-    const year = normalizeYear(first);
-
-    const fallbackData = await kodikGet('/list', {
-      title,
-      year,
+  if (kind === 'kodik') {
+    const data = await kodikGet('/list', {
+      id: value,
       with_material_data: 'true',
       types: 'anime-serial,anime'
     });
 
-    episodeResults = Array.isArray(fallbackData?.results) ? fallbackData.results : [];
+    const results = Array.isArray(data?.results) ? data.results : [];
+    if (results.length) {
+      const shikimoriId = results[0]?.shikimori_id || results[0]?.material_data?.shikimori_id;
+      if (shikimoriId) {
+        const byShikimori = await kodikGet('/list', {
+          shikimori_id: shikimoriId,
+          with_material_data: 'true',
+          types: 'anime-serial,anime'
+        });
+        return Array.isArray(byShikimori?.results) ? byShikimori.results : results;
+      }
+    }
+
+    return results;
   }
 
-  if (!episodeResults.length) {
-    episodeResults = titleResults;
-  }
-
-  return episodeResults;
+  return [];
 }
 
 app.get('/api/health/kodik', async (req, res) => {
@@ -372,14 +344,14 @@ app.get('/api/yummy/anime/:animeUrl', async (req, res) => {
     if (!KODIK_TOKEN) return res.status(500).json({ error: 'Нет токена' });
 
     const animeUrl = decodeURIComponent(req.params.animeUrl);
-    const results = await fetchAnimeByKey(animeUrl);
+    const results = await fetchAnimeByStableId(animeUrl);
 
     if (!results.length) {
       return res.status(404).json({ error: 'Аниме не найдено' });
     }
 
     const first = results[0];
-    const animeId = makeAnimeKey(first);
+    const animeId = getStableAnimeId(first) || animeUrl;
     const videos = extractEpisodesFromResults(results);
 
     res.json({
