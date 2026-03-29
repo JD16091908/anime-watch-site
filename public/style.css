@@ -302,6 +302,13 @@ input::placeholder {
   margin: 0 0 10px;
 }
 
+.users-caption {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: -4px 0 10px;
+}
+
 .search-row {
   display: flex;
   align-items: center;
@@ -562,10 +569,23 @@ input::placeholder {
 
 .user-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.user-name {
+  font-weight: 700;
+  word-break: break-word;
 }
 
 .host-label {
@@ -575,6 +595,19 @@ input::placeholder {
   color: #1b1300;
   font-size: 12px;
   font-weight: 800;
+}
+
+.user-time {
+  flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe7ff;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .user-status {
@@ -796,6 +829,16 @@ input::placeholder {
 
   .main-subtitle {
     font-size: 16px;
+  }
+
+  .user-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .user-time {
+    text-align: left;
+    width: fit-content;
   }
 }
 

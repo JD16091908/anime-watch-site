@@ -149,7 +149,6 @@ function buildEpisodeIframe(link) {
 function extractEpisodesFromItem(item) {
   const episodes = [];
 
-  // Вариант 1: seasons -> episodes
   const seasons = item?.seasons || {};
   for (const [seasonNumber, seasonData] of Object.entries(seasons)) {
     if (!seasonData || typeof seasonData !== 'object') continue;
@@ -182,7 +181,6 @@ function extractEpisodesFromItem(item) {
 
   if (episodes.length > 0) return episodes;
 
-  // Вариант 2: отдельный результат на серию
   const link = buildEpisodeIframe(item?.link);
   const episodeNumber =
     Number(item?.episode) ||
@@ -476,7 +474,9 @@ io.on('connection', (socket) => {
       id: socket.id,
       userKey,
       username: socket.data.username,
-      watchStatus: 'Не начал'
+      watchStatus: 'Не начал',
+      currentTime: null,
+      timeUpdatedAt: 0
     });
 
     if (!room.creatorUserKey) {
@@ -515,6 +515,12 @@ io.on('connection', (socket) => {
       currentTime: null,
       updatedAt: Date.now()
     };
+
+    room.users = room.users.map(user => ({
+      ...user,
+      currentTime: null,
+      timeUpdatedAt: 0
+    }));
 
     const state = getCurrentRoomState(roomId);
     io.to(roomId).emit('video-changed', state);
@@ -564,6 +570,23 @@ io.on('connection', (socket) => {
       paused: room.videoState.playback.paused,
       updatedAt: room.videoState.playback.updatedAt
     });
+  });
+
+  socket.on('update-user-time', ({ roomId, currentTime }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) && currentTime >= 0
+      ? currentTime
+      : null;
+
+    const user = room.users.find(u => u.userKey === socket.data.userKey);
+    if (!user) return;
+
+    user.currentTime = safeTime;
+    user.timeUpdatedAt = Date.now();
+
+    io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
   });
 
   socket.on('update-watch-status', ({ roomId, status }) => {

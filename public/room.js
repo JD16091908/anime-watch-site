@@ -27,6 +27,7 @@ let isRemoteAction = false;
 let userInteractedWithPlayer = false;
 let hostTimeBroadcastTimer = null;
 let kodikTimeRequestTimer = null;
+let userTimeBroadcastTimer = null;
 
 let currentState = {
   animeId: null,
@@ -88,6 +89,19 @@ function normalizeUrl(url) {
   if (!url) return url;
   if (url.startsWith('//')) return `https:${url}`;
   return url;
+}
+
+function formatWatchTime(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 function getPlayerName(video) {
@@ -349,6 +363,7 @@ function loadIframe(embedUrl, title) {
   }
 
   stopHostTimers();
+  stopUserTimeTimer();
   resetBridge();
 
   const iframe = createFreshIframe(embedUrl);
@@ -359,6 +374,10 @@ function loadIframe(embedUrl, title) {
 
   iframe.addEventListener('load', () => {
     ensureBridgeWindow();
+
+    if (bridge.playerType === 'kodik') {
+      startUserTimeTimer();
+    }
 
     if (isHost && bridge.playerType === 'kodik') {
       startHostTimers();
@@ -411,6 +430,34 @@ function stopHostTimers() {
   }
 }
 
+function startUserTimeTimer() {
+  stopUserTimeTimer();
+
+  if (roomId === 'solo') return;
+
+  userTimeBroadcastTimer = setInterval(() => {
+    if (!currentState.embedUrl) return;
+    if (bridge.playerType !== 'kodik') return;
+
+    requestKodikTime();
+
+    const ct = currentState.playback.currentTime;
+    if (typeof ct === 'number' && ct >= 0) {
+      socket.emit('update-user-time', {
+        roomId,
+        currentTime: ct
+      });
+    }
+  }, 2000);
+}
+
+function stopUserTimeTimer() {
+  if (userTimeBroadcastTimer) {
+    clearInterval(userTimeBroadcastTimer);
+    userTimeBroadcastTimer = null;
+  }
+}
+
 function renderUsers(users) {
   if (!usersList) return;
   if (!Array.isArray(users) || users.length === 0) {
@@ -418,15 +465,23 @@ function renderUsers(users) {
     return;
   }
 
-  usersList.innerHTML = users.map(user => `
-    <div class="user-item">
-      <div class="user-main">
-        <span>${escapeHtml(user.username)}</span>
-        ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
+  usersList.innerHTML = users.map(user => {
+    const hasTime = typeof user.currentTime === 'number' && !Number.isNaN(user.currentTime);
+    const timeText = hasTime ? formatWatchTime(user.currentTime) : '—:—';
+
+    return `
+      <div class="user-item">
+        <div class="user-main">
+          <div class="user-identity">
+            <span class="user-name">${escapeHtml(user.username)}</span>
+            ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
+          </div>
+          <div class="user-time" title="Текущее время просмотра">${escapeHtml(timeText)}</div>
+        </div>
+        <div class="user-status">${escapeHtml(user.watchStatus || 'Не начал')}</div>
       </div>
-      <div class="user-status">${escapeHtml(user.watchStatus || 'Не начал')}</div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderSelectedAnimeInfo(anime) {
@@ -711,6 +766,7 @@ socket.on('connect', () => {
 
 socket.on('disconnect', () => {
   stopHostTimers();
+  stopUserTimeTimer();
 });
 
 socket.on('you-are-host', () => {
@@ -862,6 +918,7 @@ statusButtons.forEach(btn => {
 
 window.addEventListener('beforeunload', () => {
   stopHostTimers();
+  stopUserTimeTimer();
 });
 
 updateControlState();
