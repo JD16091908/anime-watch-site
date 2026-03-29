@@ -117,6 +117,53 @@ function getIframeUrl(video) {
   return video?.iframeUrl || video?.iframe_url || null;
 }
 
+function normalizeTextForSearch(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scoreLocalSearchResult(item, query) {
+  const q = normalizeTextForSearch(query);
+  const title = normalizeTextForSearch(item?.title || '');
+  const year = String(item?.year || '');
+
+  if (!q || !title) return 0;
+
+  if (title === q) return 1000;
+  if (title.startsWith(q)) return 800;
+  if (title.includes(q)) return 500;
+
+  const words = q.split(' ').filter(Boolean);
+  let score = 0;
+
+  for (const word of words) {
+    if (title.startsWith(word)) score += 140;
+    else if (title.includes(word)) score += 90;
+  }
+
+  if (year && q.includes(year)) score += 20;
+
+  return score;
+}
+
+function getFilteredSearchResults(items, query) {
+  return (items || [])
+    .map(item => ({
+      ...item,
+      _score: scoreLocalSearchResult(item, query)
+    }))
+    .filter(item => item._score > 0)
+    .sort((a, b) => {
+      if (b._score !== a._score) return b._score - a._score;
+      return String(a.title).localeCompare(String(b.title), 'ru');
+    })
+    .map(({ _score, ...item }) => item);
+}
+
 function getUniquePlayers(videos) {
   const map = new Map();
   for (const video of videos || []) {
@@ -640,7 +687,9 @@ function renderEpisodes(episodes) {
 }
 
 async function searchAnime(query) {
-  if (!query || query.trim().length < 2) {
+  const rawQuery = String(query || '').trim();
+
+  if (!rawQuery || rawQuery.length < 2) {
     if (animeList) {
       animeList.innerHTML = '';
       animeList.classList.remove('visible');
@@ -655,12 +704,13 @@ async function searchAnime(query) {
   showAllSearchResults = false;
 
   try {
-    const response = await fetch(`/api/yummy/search?q=${encodeURIComponent(query.trim())}`);
+    const response = await fetch(`/api/yummy/search?q=${encodeURIComponent(rawQuery)}`);
     const data = await response.json();
 
     if (!response.ok) throw new Error(data?.error || 'Ошибка поиска');
 
-    lastSearchResults = Array.isArray(data) ? data : [];
+    const results = Array.isArray(data) ? data : [];
+    lastSearchResults = getFilteredSearchResults(results, rawQuery);
     renderAnimeResults(lastSearchResults);
 
     if (searchStatus) {

@@ -118,27 +118,71 @@ function makeAnimeKey(item) {
   return `title:${String(title).toLowerCase()}::${year}`;
 }
 
-function mapSearchResults(results) {
+function scoreSearchItem(item, query) {
+  const q = String(query || '').trim().toLowerCase();
+  const title = String(normalizeTitle(item) || '').toLowerCase();
+
+  if (!q || !title) return 0;
+  if (title === q) return 1000;
+  if (title.startsWith(q)) return 700;
+  if (title.includes(q)) return 400;
+
+  const qWords = q.split(/\s+/).filter(Boolean);
+  if (!qWords.length) return 0;
+
+  let score = 0;
+  for (const word of qWords) {
+    if (title.startsWith(word)) score += 120;
+    else if (title.includes(word)) score += 60;
+  }
+
+  return score;
+}
+
+function mapSearchResults(results, query = '') {
   const grouped = new Map();
 
   for (const item of results || []) {
     const key = makeAnimeKey(item);
+    const title = normalizeTitle(item);
+    const score = scoreSearchItem(item, query);
 
     if (!grouped.has(key)) {
       grouped.set(key, {
         animeId: key,
         animeUrl: key,
-        title: normalizeTitle(item),
+        title,
         year: normalizeYear(item),
         description: normalizeDescription(item),
         poster: normalizePoster(item),
         status: normalizeStatus(item),
-        type: normalizeType(item)
+        type: normalizeType(item),
+        _score: score
       });
+    } else {
+      const existing = grouped.get(key);
+      if (score > existing._score) {
+        grouped.set(key, {
+          ...existing,
+          title,
+          year: normalizeYear(item),
+          description: normalizeDescription(item),
+          poster: normalizePoster(item),
+          status: normalizeStatus(item),
+          type: normalizeType(item),
+          _score: score
+        });
+      }
     }
   }
 
-  return [...grouped.values()];
+  return [...grouped.values()]
+    .filter(item => item._score > 0 || !query)
+    .sort((a, b) => {
+      if (b._score !== a._score) return b._score - a._score;
+      return String(a.title).localeCompare(String(b.title), 'ru');
+    })
+    .map(({ _score, ...item }) => item);
 }
 
 function buildEpisodeIframe(link) {
@@ -146,36 +190,60 @@ function buildEpisodeIframe(link) {
   return String(link).startsWith('//') ? `https:${link}` : link;
 }
 
+function extractEpisodesFromNode(node, seasonNumber, translation, item, episodes) {
+  if (!node || typeof node !== 'object') return;
+
+  for (const [key, value] of Object.entries(node)) {
+    const episodeNumber = Number(key);
+
+    if (Number.isFinite(episodeNumber) && episodeNumber > 0) {
+      const iframeUrl = buildEpisodeIframe(
+        typeof value === 'string'
+          ? value
+          : value?.link || value?.url || value?.iframeUrl || value?.iframe_url || null
+      );
+
+      if (iframeUrl) {
+        episodes.push({
+          videoId: `${seasonNumber}-${episodeNumber}-${translation?.id || 't'}`,
+          number: episodeNumber,
+          season: Number(seasonNumber) || 1,
+          index: episodeNumber,
+          iframeUrl,
+          dubbing: translation?.title || translation?.name || '',
+          player: translation?.title || translation?.name || 'kodik',
+          playerId: translation?.id || null,
+          translationId: translation?.id || null,
+          translationTitle: translation?.title || translation?.name || '',
+          views: 0,
+          duration: 0
+        });
+        continue;
+      }
+    }
+
+    if (value && typeof value === 'object') {
+      extractEpisodesFromNode(value, seasonNumber, translation, item, episodes);
+    }
+  }
+}
+
 function extractEpisodesFromItem(item) {
   const episodes = [];
-
+  const translation = item?.translation || {};
   const seasons = item?.seasons || {};
-  for (const [seasonNumber, seasonData] of Object.entries(seasons)) {
-    if (!seasonData || typeof seasonData !== 'object') continue;
 
-    const episodesObj = seasonData?.episodes || seasonData;
-    if (!episodesObj || typeof episodesObj !== 'object') continue;
+  if (seasons && typeof seasons === 'object' && Object.keys(seasons).length > 0) {
+    for (const [seasonKey, seasonData] of Object.entries(seasons)) {
+      if (!seasonData || typeof seasonData !== 'object') continue;
 
-    for (const [episodeNumber, link] of Object.entries(episodesObj)) {
-      const iframeUrl = buildEpisodeIframe(
-        typeof link === 'string' ? link : link?.link || link?.url || null
-      );
-      if (!iframeUrl) continue;
+      const seasonNumber = Number(seasonKey) || 1;
 
-      episodes.push({
-        videoId: `${seasonNumber}-${episodeNumber}-${item?.translation?.id || 't'}`,
-        number: Number(episodeNumber) || 0,
-        season: Number(seasonNumber) || 1,
-        index: Number(episodeNumber) || 0,
-        iframeUrl,
-        dubbing: item?.translation?.title || item?.translation?.name || '',
-        player: item?.translation?.title || item?.translation?.name || 'kodik',
-        playerId: item?.translation?.id || null,
-        translationId: item?.translation?.id || null,
-        translationTitle: item?.translation?.title || item?.translation?.name || '',
-        views: 0,
-        duration: 0
-      });
+      if (seasonData.episodes && typeof seasonData.episodes === 'object') {
+        extractEpisodesFromNode(seasonData.episodes, seasonNumber, translation, item, episodes);
+      } else {
+        extractEpisodesFromNode(seasonData, seasonNumber, translation, item, episodes);
+      }
     }
   }
 
@@ -188,20 +256,20 @@ function extractEpisodesFromItem(item) {
     Number(item?.sort_episode) ||
     Number(item?.material_data?.episode) ||
     Number(item?.material_data?.last_episode) ||
-    null;
+    1;
 
   if (link) {
     episodes.push({
-      videoId: `${item?.id || 'movie'}-${episodeNumber || 1}-${item?.translation?.id || 't'}`,
-      number: episodeNumber || 1,
+      videoId: `${item?.id || 'movie'}-${episodeNumber}-${translation?.id || 't'}`,
+      number: episodeNumber,
       season: Number(item?.season) || Number(item?.material_data?.season) || 1,
-      index: episodeNumber || 1,
+      index: episodeNumber,
       iframeUrl: link,
-      dubbing: item?.translation?.title || item?.translation?.name || '',
-      player: item?.translation?.title || item?.translation?.name || 'kodik',
-      playerId: item?.translation?.id || null,
-      translationId: item?.translation?.id || null,
-      translationTitle: item?.translation?.title || item?.translation?.name || '',
+      dubbing: translation?.title || translation?.name || '',
+      player: translation?.title || translation?.name || 'kodik',
+      playerId: translation?.id || null,
+      translationId: translation?.id || null,
+      translationTitle: translation?.title || translation?.name || '',
       views: 0,
       duration: 0
     });
@@ -314,7 +382,7 @@ app.get('/api/yummy/search', async (req, res) => {
       results = Array.isArray(data?.results) ? data.results : [];
     }
 
-    res.json(mapSearchResults(results));
+    res.json(mapSearchResults(results, query));
   } catch (error) {
     console.error('SEARCH ERROR:', error.message);
     res.status(500).json({ error: 'Не удалось выполнить поиск', details: error.message });
