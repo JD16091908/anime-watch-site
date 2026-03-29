@@ -358,8 +358,7 @@ function ensureRoom(roomId) {
   if (!rooms[roomId]) {
     rooms[roomId] = {
       creatorUserKey: null,
-      hostUserKey: null,
-      hostSocketId: null,
+      creatorSocketId: null,
       users: [],
       videoState: {
         embedUrl: null,
@@ -379,33 +378,19 @@ function ensureRoom(roomId) {
   return rooms[roomId];
 }
 
-function resolveHost(room) {
-  if (!room) return;
+function attachCreatorSocketIfOwner(room, socket) {
+  if (!room || !socket?.data?.userKey) return;
 
-  if (room.creatorUserKey) {
-    const creatorOnline = room.users.find(u => u.userKey === room.creatorUserKey);
-    if (creatorOnline) {
-      room.hostUserKey = room.creatorUserKey;
-      room.hostSocketId = creatorOnline.id;
-      return;
-    }
+  if (room.creatorUserKey && room.creatorUserKey === socket.data.userKey) {
+    room.creatorSocketId = socket.id;
   }
+}
 
-  if (room.hostUserKey) {
-    const hostOnline = room.users.find(u => u.userKey === room.hostUserKey);
-    if (hostOnline) {
-      room.hostSocketId = hostOnline.id;
-      return;
-    }
-  }
-
-  if (room.users.length > 0) {
-    room.hostUserKey = room.users[0].userKey;
-    room.hostSocketId = room.users[0].id;
-  } else {
-    room.hostUserKey = null;
-    room.hostSocketId = null;
-  }
+function isRoomHost(room, socket) {
+  if (!room || !socket) return false;
+  return !!room.creatorUserKey
+    && room.creatorUserKey === socket.data.userKey
+    && room.creatorSocketId === socket.id;
 }
 
 function getEffectivePlayback(pb) {
@@ -440,7 +425,7 @@ function getCurrentRoomState(roomId) {
   return {
     embedUrl: room.videoState.embedUrl,
     title: room.videoState.title,
-    hostId: room.hostSocketId,
+    hostId: room.creatorSocketId,
     animeId: room.videoState.animeId,
     animeUrl: room.videoState.animeUrl,
     episodeNumber: room.videoState.episodeNumber,
@@ -454,7 +439,7 @@ function getUsersWithMeta(roomId) {
 
   return room.users.map(u => ({
     ...u,
-    isHost: u.id === room.hostSocketId
+    isHost: !!room.creatorSocketId && u.id === room.creatorSocketId
   }));
 }
 
@@ -469,6 +454,8 @@ io.on('connection', (socket) => {
     socket.data.username = username || 'Гость';
     socket.data.userKey = userKey;
 
+    room.users = room.users.filter(u => u.id !== socket.id);
+
     room.users.push({
       id: socket.id,
       userKey,
@@ -480,11 +467,13 @@ io.on('connection', (socket) => {
 
     if (!room.creatorUserKey) {
       room.creatorUserKey = userKey;
+      room.creatorSocketId = socket.id;
+    } else {
+      attachCreatorSocketIfOwner(room, socket);
     }
 
-    resolveHost(room);
+    const isHostNow = isRoomHost(room, socket);
 
-    const isHostNow = room.hostSocketId === socket.id;
     if (isHostNow) {
       socket.emit('you-are-host');
     }
@@ -502,7 +491,7 @@ io.on('connection', (socket) => {
 
   socket.on('change-video', ({ roomId, embedUrl, title, animeId, animeUrl, episodeNumber }) => {
     const room = rooms[roomId];
-    if (!room || room.hostSocketId !== socket.id) return;
+    if (!room || !isRoomHost(room, socket)) return;
 
     room.videoState.embedUrl = embedUrl || null;
     room.videoState.title = title || 'Без названия';
@@ -529,7 +518,7 @@ io.on('connection', (socket) => {
 
   socket.on('player-control', ({ roomId, action, currentTime }) => {
     const room = rooms[roomId];
-    if (!room || room.hostSocketId !== socket.id) return;
+    if (!room || !isRoomHost(room, socket)) return;
 
     const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
       ? currentTime
@@ -622,10 +611,8 @@ io.on('connection', (socket) => {
 
     room.users = room.users.filter(u => u.id !== socket.id);
 
-    resolveHost(room);
-
-    if (room.hostSocketId) {
-      io.to(room.hostSocketId).emit('you-are-host');
+    if (room.creatorSocketId === socket.id) {
+      room.creatorSocketId = null;
     }
 
     if (room.users.length > 0) {
