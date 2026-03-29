@@ -30,6 +30,7 @@ let userInteractedWithPlayer = false;
 let hostTimeBroadcastTimer = null;
 let kodikTimeRequestTimer = null;
 let userTimeBroadcastTimer = null;
+let isPlayerDropdownOpen = false;
 
 let currentState = {
   animeId: null,
@@ -598,25 +599,71 @@ function renderAnimeResults(items) {
   }
 }
 
+function closePlayerDropdown() {
+  isPlayerDropdownOpen = false;
+  renderPlayers(selectedAnime?.videos || []);
+}
+
 function renderPlayers(videos) {
   if (!playerList) return;
   const players = getUniquePlayers(videos);
 
   if (!players.length) {
-    playerList.innerHTML = `<div class="empty-state">Нет доступных плееров</div>`;
+    playerList.innerHTML = `<div class="empty-state">Нет доступных озвучек</div>`;
     return;
   }
 
-  playerList.innerHTML = players.map(player => `
-    <button type="button" class="selector-chip ${player.name === selectedPlayer ? 'active' : ''}" data-player="${escapeHtml(player.name)}">
-      ${escapeHtml(player.name)} <span class="selector-chip-count">${player.count}</span>
-    </button>
-  `).join('');
+  if (!selectedPlayer) {
+    selectedPlayer = players[0].name;
+  }
 
-  playerList.querySelectorAll('button').forEach(btn => {
+  const currentPlayer = players.find(p => p.name === selectedPlayer) || players[0];
+  const titleText = currentPlayer
+    ? `Озвучка ${currentPlayer.name} (${currentPlayer.count} эп.)`
+    : 'Выберите озвучку';
+
+  playerList.innerHTML = `
+    <div class="player-dropdown ${isPlayerDropdownOpen ? 'open' : ''}">
+      <button type="button" class="player-dropdown-trigger">
+        <span class="player-dropdown-trigger-text">${escapeHtml(titleText)}</span>
+        <span class="player-dropdown-trigger-arrow">${isPlayerDropdownOpen ? '⌃' : '⌄'}</span>
+      </button>
+
+      <div class="player-dropdown-menu">
+        <div class="player-dropdown-label">ОЗВУЧКИ</div>
+        <div class="player-dropdown-items">
+          ${players.map(player => `
+            <button
+              type="button"
+              class="player-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
+              data-player="${escapeHtml(player.name)}"
+            >
+              <span class="player-dropdown-item-title">Озвучка ${escapeHtml(player.name)} (${player.count} эп.)</span>
+              <span class="player-dropdown-item-count">${player.count}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  const trigger = playerList.querySelector('.player-dropdown-trigger');
+  if (trigger) {
+    trigger.disabled = !canControl();
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!canControl()) return;
+      isPlayerDropdownOpen = !isPlayerDropdownOpen;
+      renderPlayers(selectedAnime?.videos || []);
+    });
+  }
+
+  playerList.querySelectorAll('.player-dropdown-item').forEach(btn => {
     btn.disabled = !canControl();
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
       selectedPlayer = btn.dataset.player;
+      isPlayerDropdownOpen = false;
       renderPlayers(selectedAnime?.videos || []);
       const videosByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
       renderEpisodes(getUniqueEpisodes(videosByPlayer));
@@ -628,7 +675,7 @@ function renderEpisodes(episodes) {
   if (!episodesList) return;
 
   if (!episodes.length) {
-    episodesList.innerHTML = `<div class="empty-state">Серий для этого плеера нет</div>`;
+    episodesList.innerHTML = `<div class="empty-state">Серий для этой озвучки нет</div>`;
     return;
   }
 
@@ -738,8 +785,8 @@ async function selectAnime(itemOrAnimeUrl) {
   if (!selectedItem || !canControl()) return;
 
   if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = 'Загрузка...';
-  if (playerList) playerList.innerHTML = `<div class="empty-state">Загрузка плееров...</div>`;
-  if (episodesList) episodesList.innerHTML = `<div class="empty-state">Сначала выберите плеер</div>`;
+  if (playerList) playerList.innerHTML = `<div class="empty-state">Загрузка озвучек...</div>`;
+  if (episodesList) episodesList.innerHTML = `<div class="empty-state">Сначала выберите озвучку</div>`;
 
   try {
     const response = await fetch('/api/yummy/anime/by-selection', {
@@ -768,14 +815,15 @@ async function selectAnime(itemOrAnimeUrl) {
     };
 
     selectedPlayer = null;
+    isPlayerDropdownOpen = false;
     currentState.episodeNumber = null;
 
     renderSelectedAnimeInfo(selectedAnime);
     renderPlayers(selectedAnime.videos);
-    episodesList.innerHTML = `<div class="empty-state">Сначала выберите плеер</div>`;
+    episodesList.innerHTML = `<div class="empty-state">Сначала выберите озвучку</div>`;
   } catch (error) {
     if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = `<div>${escapeHtml(error.message || 'Ошибка')}</div>`;
-    if (playerList) playerList.innerHTML = `<div class="empty-state">Не удалось загрузить плееры</div>`;
+    if (playerList) playerList.innerHTML = `<div class="empty-state">Не удалось загрузить озвучки</div>`;
     if (episodesList) episodesList.innerHTML = `<div class="empty-state">Не удалось загрузить серии</div>`;
   }
 }
@@ -792,6 +840,11 @@ document.addEventListener('click', (event) => {
   const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
   if (!withinSearch) {
     animeList?.classList.remove('visible');
+  }
+
+  const withinPlayerDropdown = event.target.closest('.player-dropdown');
+  if (!withinPlayerDropdown && isPlayerDropdownOpen) {
+    closePlayerDropdown();
   }
 });
 
