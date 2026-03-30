@@ -86,8 +86,6 @@ const overlayPlayerMenu = document.getElementById('overlayPlayerMenu');
 const overlaySeasonMenu = document.getElementById('overlaySeasonMenu');
 const overlayEpisodeMenu = document.getElementById('overlayEpisodeMenu');
 
-let nextEpisodeButton = null;
-
 if (roomTitle) {
   roomTitle.textContent = roomId === 'solo' ? 'Одиночный просмотр' : `Комната: ${roomId}`;
 }
@@ -101,7 +99,7 @@ function sys(text) {
   }
 }
 
-function addSeriesMessageToChat(title, source = 'unknown') {
+function addSeriesMessageToChat(title) {
   if (!title || !chatMessages || !window.ChatModule) return;
 
   const text = roomId === 'solo'
@@ -271,79 +269,6 @@ function findDefaultContext(videos) {
   return { player, season, episode };
 }
 
-function getCurrentEpisodeList() {
-  if (!selectedAnime?.videos?.length || !selectedPlayer) return [];
-  const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
-  const bySeason = getVideosBySelectedSeason(byPlayer);
-  return getUniqueEpisodes(bySeason);
-}
-
-function getNextEpisode() {
-  const episodes = getCurrentEpisodeList();
-  if (!episodes.length || !currentState.episodeNumber) return null;
-
-  const currentIndex = episodes.findIndex(ep => ep.episodeNumber === currentState.episodeNumber);
-  if (currentIndex === -1) return null;
-
-  return episodes[currentIndex + 1] || null;
-}
-
-function ensureNextEpisodeButton() {
-  if (nextEpisodeButton) return nextEpisodeButton;
-
-  const playerWrapper = document.getElementById('playerWrapper');
-  if (!playerWrapper) return null;
-
-  nextEpisodeButton = document.createElement('button');
-  nextEpisodeButton.type = 'button';
-  nextEpisodeButton.id = 'nextEpisodeFloatingBtn';
-  nextEpisodeButton.className = 'next-episode-floating-btn hidden';
-  nextEpisodeButton.textContent = 'Следующая серия';
-
-  nextEpisodeButton.addEventListener('click', () => {
-    const nextEpisode = getNextEpisode();
-    if (!nextEpisode || !selectedAnime || !canControl()) return;
-    hideNextEpisodeButton();
-    launchEpisode(nextEpisode, selectedAnime);
-  });
-
-  playerWrapper.appendChild(nextEpisodeButton);
-  return nextEpisodeButton;
-}
-
-function showNextEpisodeButton() {
-  const btn = ensureNextEpisodeButton();
-  if (!btn) return;
-
-  const nextEpisode = getNextEpisode();
-  if (!nextEpisode || !canControl()) return;
-
-  btn.classList.remove('hidden');
-}
-
-function hideNextEpisodeButton() {
-  if (!nextEpisodeButton) return;
-  nextEpisodeButton.classList.add('hidden');
-}
-
-function updateNextEpisodeVisibility() {
-  const hasDuration = typeof currentState.duration === 'number' && currentState.duration > 0;
-  const hasCurrentTime = typeof currentState.playback.currentTime === 'number' && currentState.playback.currentTime >= 0;
-  const nextEpisode = getNextEpisode();
-
-  if (!hasDuration || !hasCurrentTime || !nextEpisode || !canControl()) {
-    hideNextEpisodeButton();
-    return;
-  }
-
-  const remaining = currentState.duration - currentState.playback.currentTime;
-  if (remaining <= 30 && remaining > 0) {
-    showNextEpisodeButton();
-  } else {
-    hideNextEpisodeButton();
-  }
-}
-
 function updateControlState() {
   const disabled = !canControl();
 
@@ -373,8 +298,6 @@ function updateControlState() {
   overlayPlayerMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
   overlaySeasonMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
   overlayEpisodeMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
-
-  updateNextEpisodeVisibility();
 }
 
 function showPlaceholder(title = 'Ничего не выбрано', description = 'Выберите аниме') {
@@ -387,7 +310,6 @@ function showPlaceholder(title = 'Ничего не выбрано', description
   }
 
   hideOverlay();
-  hideNextEpisodeButton();
   resetBridge();
 }
 
@@ -569,7 +491,6 @@ function loadIframe(embedUrl) {
   stopHostTimers();
   stopUserTimeTimer();
   resetBridge();
-  hideNextEpisodeButton();
 
   const iframe = createFreshIframe(embedUrl);
   bridge.playerType = detectPlayerType(embedUrl);
@@ -958,10 +879,9 @@ function launchEpisode(episode, anime) {
   userInteractedWithPlayer = true;
   loadIframe(embedUrl);
   renderOverlayControls();
-  hideNextEpisodeButton();
 
   if (canControl()) {
-    addSeriesMessageToChat(title, 'local');
+    addSeriesMessageToChat(title);
   }
 
   if (roomId !== 'solo') {
@@ -1079,7 +999,6 @@ async function selectAnime(itemOrAnimeUrl) {
       selectedAnimeInfo.innerHTML = `<div>${escapeHtml(error.message || 'Ошибка')}</div>`;
     }
     hideOverlay();
-    hideNextEpisodeButton();
   }
 }
 
@@ -1144,13 +1063,11 @@ window.addEventListener('message', (event) => {
       if (!Number.isNaN(seconds) && seconds >= 0) {
         currentState.playback.currentTime = seconds;
         currentState.playback.updatedAt = Date.now();
-        updateNextEpisodeVisibility();
       }
     }
 
     if (key === 'kodik_player_duration_update') {
       currentState.duration = Number(value) || 0;
-      updateNextEpisodeVisibility();
     }
 
     if (!isRemoteAction && roomId !== 'solo' && isHost) {
@@ -1185,7 +1102,6 @@ window.addEventListener('message', (event) => {
         if (!Number.isNaN(seekTime) && seekTime >= 0) {
           currentState.playback.currentTime = seekTime;
           currentState.playback.updatedAt = Date.now();
-          updateNextEpisodeVisibility();
 
           socket.emit('player-control', {
             roomId,
@@ -1263,8 +1179,6 @@ socket.on('sync-state', (state) => {
   if (selectedAnime?.videos?.length) {
     renderOverlayControls();
   }
-
-  updateNextEpisodeVisibility();
 });
 
 socket.on('video-changed', (state) => {
@@ -1290,15 +1204,13 @@ socket.on('video-changed', (state) => {
     loadIframe(currentState.embedUrl);
 
     if (!isHost || roomId === 'solo') {
-      addSeriesMessageToChat(currentState.title, 'socket');
+      addSeriesMessageToChat(currentState.title);
     } else {
       resetLastSeriesMessage(currentState.title);
     }
   } else {
     showPlaceholder('Ничего не выбрано', 'Хост пока не запустил тайтл');
   }
-
-  hideNextEpisodeButton();
 });
 
 socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
@@ -1313,8 +1225,6 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
     currentTime: safeTime ?? null,
     updatedAt: Number(updatedAt || Date.now()) || Date.now()
   };
-
-  updateNextEpisodeVisibility();
 
   if (action === 'seek' || action === 'play' || action === 'pause') {
     applyPlaybackStateWhenReady(currentState.playback, 10);
@@ -1390,7 +1300,6 @@ window.addEventListener('beforeunload', () => {
   stopUserTimeTimer();
 });
 
-ensureNextEpisodeButton();
 updateControlState();
 showPlaceholder('Ничего не выбрано', 'Выберите аниме');
 renderUsers([]);

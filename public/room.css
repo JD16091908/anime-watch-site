@@ -311,7 +311,6 @@
   margin-top: -6px;
 }
 
-/* АДАПТИВНЫЙ ПЛЕЕР ДЛЯ FHD / 2K / 4K */
 .player-wrapper {
   width: 100%;
   max-width: none;
@@ -339,18 +338,19 @@
   position: relative;
 }
 
+/* СИЛЬНО РАСШИРЕННАЯ МАСКИРОВКА КНОПКИ KODIK */
 .player-top-overlay {
   position: absolute;
-  top: 10px;
-  left: 86px;
-  z-index: 7;
+  top: 8px;
+  left: 0;
+  z-index: 8;
   display: flex;
   align-items: flex-start;
   pointer-events: auto;
-  max-width: calc(100% - 170px);
-  padding: 6px;
-  border-radius: 12px;
-  background: rgba(12, 12, 12, 0.96);
+  max-width: 100%;
+  padding: 6px 10px 6px 150px;
+  border-radius: 0 0 14px 0;
+  background: rgba(10, 10, 10, 0.98);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.42);
 }
 
@@ -486,28 +486,6 @@
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
-}
-
-.next-episode-floating-btn {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 7;
-  border: none;
-  border-radius: 12px;
-  padding: 12px 18px;
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 14px 30px rgba(124, 58, 237, 0.35);
-  transition: 0.2s ease;
-}
-
-.next-episode-floating-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 18px 34px rgba(124, 58, 237, 0.45);
 }
 
 .placeholder {
@@ -703,8 +681,7 @@
   }
 
   .player-top-overlay {
-    left: 94px;
-    max-width: calc(100% - 190px);
+    padding-left: 158px;
   }
 }
 
@@ -720,8 +697,7 @@
   }
 
   .player-top-overlay {
-    top: 14px;
-    left: 100px;
+    padding-left: 170px;
   }
 
   .overlay-control-btn {
@@ -830,11 +806,11 @@
   }
 
   .player-top-overlay {
-    top: 8px;
-    left: 68px;
-    max-width: calc(100% - 88px);
-    padding: 5px;
-    border-radius: 10px;
+    top: 6px;
+    left: 0;
+    max-width: 100%;
+    padding: 5px 8px 5px 122px;
+    border-radius: 0 0 12px 0;
   }
 
   .player-overlay-controls {
@@ -859,12 +835,5 @@
   .overlay-dropdown-item-episode {
     min-height: 30px;
     font-size: 11px;
-  }
-
-  .next-episode-floating-btn {
-    right: 12px;
-    bottom: 12px;
-    padding: 10px 14px;
-    font-size: 13px;
   }
 }
