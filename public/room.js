@@ -66,6 +66,8 @@ const sendBtn = document.getElementById('sendBtn');
 const searchStatus = document.getElementById('searchStatus');
 const selectedAnimeInfo = document.getElementById('selectedAnimeInfo');
 const hostSearchHint = document.getElementById('hostSearchHint');
+const selectorMetaText = document.getElementById('selectorMetaText');
+const episodesMetaText = document.getElementById('episodesMetaText');
 
 if (roomTitle) {
   roomTitle.textContent = roomId === 'solo' ? 'Одиночный просмотр' : `Комната: ${roomId}`;
@@ -211,6 +213,40 @@ function getUniqueEpisodes(videos) {
     }
   }
   return [...map.values()].sort((a, b) => a.episodeNumber - b.episodeNumber);
+}
+
+function updateSelectorMeta() {
+  if (selectorMetaText) {
+    if (!selectedAnime) {
+      selectorMetaText.textContent = 'Сначала выберите тайтл';
+    } else {
+      const playerText = selectedPlayer ? `Озвучка: ${selectedPlayer}` : 'Озвучка не выбрана';
+      const seasonText = selectedSeason ? `Сезон: ${selectedSeason}` : 'Сезон не выбран';
+      selectorMetaText.textContent = `${playerText} • ${seasonText}`;
+    }
+  }
+
+  if (episodesMetaText) {
+    if (!selectedAnime) {
+      episodesMetaText.textContent = 'Сначала выберите тайтл';
+      return;
+    }
+
+    const byPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
+    const bySeason = getVideosBySelectedSeason(byPlayer);
+    const episodes = getUniqueEpisodes(bySeason);
+
+    if (!episodes.length) {
+      episodesMetaText.textContent = 'Нет серий для выбранного сезона';
+      return;
+    }
+
+    const from = episodes[0]?.episodeNumber || 1;
+    const to = episodes[episodes.length - 1]?.episodeNumber || episodes.length;
+    const active = currentState.episodeNumber ? ` • Выбрана серия ${currentState.episodeNumber}` : '';
+
+    episodesMetaText.textContent = `Серии ${from}–${to}${active}`;
+  }
 }
 
 function updateControlState() {
@@ -637,12 +673,23 @@ function closeSeasonDropdown() {
   renderPlayers(selectedAnime?.videos || []);
 }
 
+function buildPlayerTriggerText(player) {
+  if (!player) return 'Выберите озвучку';
+  return `${player.name} • ${player.count} сер.`;
+}
+
+function buildSeasonTriggerText(season) {
+  if (!season) return 'Выберите сезон';
+  return `${season.season} сезон`;
+}
+
 function renderPlayers(videos) {
   if (!playerList) return;
   const players = getUniquePlayers(videos);
 
   if (!players.length) {
     playerList.innerHTML = `<div class="empty-state">Нет доступных озвучек</div>`;
+    updateSelectorMeta();
     return;
   }
 
@@ -651,10 +698,6 @@ function renderPlayers(videos) {
   }
 
   const currentPlayer = players.find(p => p.name === selectedPlayer) || players[0];
-  const titleText = currentPlayer
-    ? `Озвучка ${currentPlayer.name} (${currentPlayer.count} эп.)`
-    : 'Выберите озвучку';
-
   const playerVideos = getVideosBySelectedPlayer(selectedAnime?.videos || []);
   const seasons = getUniqueSeasons(playerVideos);
   const showSeasonSelector = seasons.length > 1;
@@ -668,59 +711,58 @@ function renderPlayers(videos) {
   }
 
   const currentSeason = seasons.find(s => s.season === selectedSeason) || seasons[0];
-  const seasonText = currentSeason
-    ? `${currentSeason.season} сезон`
-    : 'Выберите сезон';
 
   playerList.innerHTML = `
-    <div class="selectors-row">
-      <div class="player-dropdown ${isPlayerDropdownOpen ? 'open' : ''}">
-        <button type="button" class="player-dropdown-trigger" data-dropdown="player">
-          <span class="player-dropdown-trigger-text">${escapeHtml(titleText)}</span>
-          <span class="player-dropdown-trigger-arrow">${isPlayerDropdownOpen ? '⌃' : '⌄'}</span>
-        </button>
-
-        <div class="player-dropdown-menu">
-          <div class="player-dropdown-label">ОЗВУЧКИ</div>
-          <div class="player-dropdown-items">
-            ${players.map(player => `
-              <button
-                type="button"
-                class="player-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
-                data-player="${escapeHtml(player.name)}"
-              >
-                <span class="player-dropdown-item-title">Озвучка ${escapeHtml(player.name)} (${player.count} эп.)</span>
-                <span class="player-dropdown-item-count">${player.count}</span>
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-
-      ${showSeasonSelector ? `
-        <div class="player-dropdown ${isSeasonDropdownOpen ? 'open' : ''}">
-          <button type="button" class="player-dropdown-trigger" data-dropdown="season">
-            <span class="player-dropdown-trigger-text">${escapeHtml(seasonText)}</span>
-            <span class="player-dropdown-trigger-arrow">${isSeasonDropdownOpen ? '⌃' : '⌄'}</span>
+    <div class="selectors-toolbar">
+      <div class="selector-chip-group">
+        <div class="player-dropdown player-dropdown-compact ${isPlayerDropdownOpen ? 'open' : ''}">
+          <button type="button" class="player-dropdown-trigger compact-trigger" data-dropdown="player">
+            <span class="player-dropdown-trigger-text">${escapeHtml(buildPlayerTriggerText(currentPlayer))}</span>
+            <span class="player-dropdown-trigger-arrow">${isPlayerDropdownOpen ? '⌃' : '⌄'}</span>
           </button>
 
-          <div class="player-dropdown-menu">
-            <div class="player-dropdown-label">СЕЗОНЫ</div>
+          <div class="player-dropdown-menu compact-menu">
+            <div class="player-dropdown-label">ОЗВУЧКИ</div>
             <div class="player-dropdown-items">
-              ${seasons.map(season => `
+              ${players.map(player => `
                 <button
                   type="button"
-                  class="player-dropdown-item ${season.season === selectedSeason ? 'active' : ''}"
-                  data-season="${season.season}"
+                  class="player-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
+                  data-player="${escapeHtml(player.name)}"
                 >
-                  <span class="player-dropdown-item-title">${season.season} сезон</span>
-                  <span class="player-dropdown-item-count">${season.count}</span>
+                  <span class="player-dropdown-item-title">${escapeHtml(player.name)}</span>
+                  <span class="player-dropdown-item-count">${player.count}</span>
                 </button>
               `).join('')}
             </div>
           </div>
         </div>
-      ` : ''}
+
+        ${showSeasonSelector ? `
+          <div class="player-dropdown player-dropdown-compact ${isSeasonDropdownOpen ? 'open' : ''}">
+            <button type="button" class="player-dropdown-trigger compact-trigger" data-dropdown="season">
+              <span class="player-dropdown-trigger-text">${escapeHtml(buildSeasonTriggerText(currentSeason))}</span>
+              <span class="player-dropdown-trigger-arrow">${isSeasonDropdownOpen ? '⌃' : '⌄'}</span>
+            </button>
+
+            <div class="player-dropdown-menu compact-menu">
+              <div class="player-dropdown-label">СЕЗОНЫ</div>
+              <div class="player-dropdown-items">
+                ${seasons.map(season => `
+                  <button
+                    type="button"
+                    class="player-dropdown-item ${season.season === selectedSeason ? 'active' : ''}"
+                    data-season="${season.season}"
+                  >
+                    <span class="player-dropdown-item-title">${season.season} сезон</span>
+                    <span class="player-dropdown-item-count">${season.count}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
     </div>
   `;
 
@@ -780,6 +822,21 @@ function renderPlayers(videos) {
       renderEpisodes(getUniqueEpisodes(filteredBySeason));
     });
   });
+
+  updateSelectorMeta();
+}
+
+function scrollActiveEpisodeIntoView() {
+  const activeEpisode = episodesList?.querySelector('.episode-tile.active');
+  if (!activeEpisode) return;
+
+  requestAnimationFrame(() => {
+    activeEpisode.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest'
+    });
+  });
 }
 
 function renderEpisodes(episodes) {
@@ -787,16 +844,18 @@ function renderEpisodes(episodes) {
 
   if (!episodes.length) {
     episodesList.innerHTML = `<div class="empty-state">Серий для выбранного сезона нет</div>`;
+    updateSelectorMeta();
     return;
   }
 
   episodesList.innerHTML = episodes.map(episode => `
     <button
       type="button"
-      class="episode-tile ${episode.episodeNumber === currentState.episodeNumber ? 'active' : ''}"
+      class="episode-tile episode-chip ${episode.episodeNumber === currentState.episodeNumber ? 'active' : ''}"
       data-episode="${episode.episodeNumber}"
+      title="Серия ${episode.episodeNumber}"
     >
-      ${episode.episodeNumber}
+      <span class="episode-chip-number">${episode.episodeNumber}</span>
     </button>
   `).join('');
 
@@ -811,7 +870,8 @@ function renderEpisodes(episodes) {
 
       const embedUrl = getIframeUrl(episode);
       const season = getSeasonNumber(episode);
-      const title = `${selectedAnime?.title || 'Аниме'} — сезон ${season}, серия ${episodeNumber}`;
+      const playerName = getPlayerName(episode);
+      const title = `${selectedAnime?.title || 'Аниме'} — ${playerName}, сезон ${season}, серия ${episodeNumber}`;
 
       currentState = {
         animeId: selectedAnime?.animeId ?? null,
@@ -843,6 +903,9 @@ function renderEpisodes(episodes) {
       }
     });
   });
+
+  updateSelectorMeta();
+  scrollActiveEpisodeIntoView();
 }
 
 async function searchAnime(query) {
@@ -904,6 +967,8 @@ async function selectAnime(itemOrAnimeUrl) {
   if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = 'Загрузка...';
   if (playerList) playerList.innerHTML = `<div class="empty-state">Загрузка озвучек...</div>`;
   if (episodesList) episodesList.innerHTML = `<div class="empty-state">Сначала выберите озвучку</div>`;
+  if (selectorMetaText) selectorMetaText.textContent = 'Загрузка озвучек...';
+  if (episodesMetaText) episodesMetaText.textContent = 'Загрузка серий...';
 
   try {
     const response = await fetch('/api/yummy/anime/by-selection', {
@@ -949,6 +1014,8 @@ async function selectAnime(itemOrAnimeUrl) {
     if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = `<div>${escapeHtml(error.message || 'Ошибка')}</div>`;
     if (playerList) playerList.innerHTML = `<div class="empty-state">Не удалось загрузить озвучки</div>`;
     if (episodesList) episodesList.innerHTML = `<div class="empty-state">Не удалось загрузить серии</div>`;
+    if (selectorMetaText) selectorMetaText.textContent = 'Не удалось загрузить озвучки';
+    if (episodesMetaText) episodesMetaText.textContent = 'Не удалось загрузить серии';
   }
 }
 
@@ -1097,6 +1164,8 @@ socket.on('sync-state', (state) => {
   } else {
     showPlaceholder('Ничего не выбрано', 'Хост пока не запустил серию');
   }
+
+  updateSelectorMeta();
 });
 
 socket.on('video-changed', (state) => {
@@ -1113,6 +1182,14 @@ socket.on('video-changed', (state) => {
       updatedAt: 0
     }
   };
+
+  if (selectedAnime?.videos?.length) {
+    const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
+    const bySeason = getVideosBySelectedSeason(byPlayer);
+    renderEpisodes(getUniqueEpisodes(bySeason));
+  } else {
+    updateSelectorMeta();
+  }
 
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl, currentState.title);
@@ -1210,5 +1287,6 @@ window.addEventListener('beforeunload', () => {
 });
 
 updateControlState();
+updateSelectorMeta();
 showPlaceholder('Ничего не выбрано', 'Выберите аниме и серию');
 renderUsers([]);
