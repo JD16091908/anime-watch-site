@@ -36,6 +36,8 @@ let isOverlayPlayerOpen = false;
 let isOverlaySeasonOpen = false;
 let isOverlayEpisodeOpen = false;
 
+let lastSeriesChatMessage = '';
+
 let currentState = {
   animeId: null,
   animeUrl: null,
@@ -99,14 +101,25 @@ function sys(text) {
   }
 }
 
-function addSeriesMessageToChat(title) {
+function addSeriesMessageToChat(title, source = 'unknown') {
   if (!title || !chatMessages || !window.ChatModule) return;
 
   const text = roomId === 'solo'
     ? `Вы выбрали: ${title}`
     : `Хост выбрал: ${title}`;
 
+  if (lastSeriesChatMessage === text) return;
+  lastSeriesChatMessage = text;
+
   ChatModule.appendSystemMessage(chatMessages, text);
+}
+
+function resetLastSeriesMessage(title = '') {
+  lastSeriesChatMessage = title ? (
+    roomId === 'solo'
+      ? `Вы выбрали: ${title}`
+      : `Хост выбрал: ${title}`
+  ) : '';
 }
 
 function escapeHtml(value) {
@@ -946,7 +959,10 @@ function launchEpisode(episode, anime) {
   loadIframe(embedUrl);
   renderOverlayControls();
   hideNextEpisodeButton();
-  addSeriesMessageToChat(title);
+
+  if (canControl()) {
+    addSeriesMessageToChat(title, 'local');
+  }
 
   if (roomId !== 'solo') {
     socket.emit('change-video', {
@@ -1231,6 +1247,8 @@ socket.on('sync-state', (state) => {
     }
   };
 
+  resetLastSeriesMessage(currentState.title);
+
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
 
@@ -1270,7 +1288,12 @@ socket.on('video-changed', (state) => {
 
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
-    addSeriesMessageToChat(currentState.title);
+
+    if (!isHost || roomId === 'solo') {
+      addSeriesMessageToChat(currentState.title, 'socket');
+    } else {
+      resetLastSeriesMessage(currentState.title);
+    }
   } else {
     showPlaceholder('Ничего не выбрано', 'Хост пока не запустил тайтл');
   }
