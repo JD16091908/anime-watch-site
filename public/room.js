@@ -37,6 +37,7 @@ let isOverlaySeasonOpen = false;
 let isOverlayEpisodeOpen = false;
 
 let lastSeriesChatMessage = '';
+let lastSeriesChatMessageAt = 0;
 
 let currentState = {
   animeId: null,
@@ -106,8 +107,15 @@ function addSeriesMessageToChat(title) {
     ? `Вы выбрали: ${title}`
     : `Хост выбрал: ${title}`;
 
-  if (lastSeriesChatMessage === text) return;
+  const now = Date.now();
+  const isDuplicate =
+    lastSeriesChatMessage === text &&
+    now - lastSeriesChatMessageAt < 5000;
+
+  if (isDuplicate) return;
+
   lastSeriesChatMessage = text;
+  lastSeriesChatMessageAt = now;
 
   ChatModule.appendSystemMessage(chatMessages, text);
 }
@@ -118,6 +126,7 @@ function resetLastSeriesMessage(title = '') {
       ? `Вы выбрали: ${title}`
       : `Хост выбрал: ${title}`
   ) : '';
+  lastSeriesChatMessageAt = Date.now();
 }
 
 function escapeHtml(value) {
