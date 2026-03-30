@@ -20,6 +20,7 @@ const userKey = getOrCreateUserKey();
 let isHost = false;
 let selectedAnime = null;
 let selectedPlayer = null;
+let selectedSeason = null;
 let searchDebounce = null;
 let lastSearchResults = [];
 let showAllSearchResults = false;
@@ -31,6 +32,7 @@ let hostTimeBroadcastTimer = null;
 let kodikTimeRequestTimer = null;
 let userTimeBroadcastTimer = null;
 let isPlayerDropdownOpen = false;
+let isSeasonDropdownOpen = false;
 
 let currentState = {
   animeId: null,
@@ -130,6 +132,11 @@ function getEpisodeNumber(video) {
   return Number(video?.number) || Number(video?.index) || 0;
 }
 
+function getSeasonNumber(video) {
+  const season = Number(video?.season);
+  return season > 0 ? season : 1;
+}
+
 function getIframeUrl(video) {
   return video?.iframeUrl || video?.iframe_url || null;
 }
@@ -169,6 +176,29 @@ function getUniquePlayers(videos) {
 function getVideosBySelectedPlayer(videos) {
   if (!selectedPlayer) return [];
   return (videos || []).filter(v => getPlayerName(v) === selectedPlayer && !!getIframeUrl(v));
+}
+
+function getUniqueSeasons(videos) {
+  const map = new Map();
+
+  for (const video of videos || []) {
+    const season = getSeasonNumber(video);
+    if (!map.has(season)) {
+      map.set(season, {
+        season,
+        count: 1
+      });
+    } else {
+      map.get(season).count += 1;
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.season - b.season);
+}
+
+function getVideosBySelectedSeason(videos) {
+  if (!selectedSeason) return [];
+  return (videos || []).filter(v => getSeasonNumber(v) === selectedSeason);
 }
 
 function getUniqueEpisodes(videos) {
@@ -604,6 +634,11 @@ function closePlayerDropdown() {
   renderPlayers(selectedAnime?.videos || []);
 }
 
+function closeSeasonDropdown() {
+  isSeasonDropdownOpen = false;
+  renderPlayers(selectedAnime?.videos || []);
+}
+
 function renderPlayers(videos) {
   if (!playerList) return;
   const players = getUniquePlayers(videos);
@@ -622,51 +657,129 @@ function renderPlayers(videos) {
     ? `Озвучка ${currentPlayer.name} (${currentPlayer.count} эп.)`
     : 'Выберите озвучку';
 
-  playerList.innerHTML = `
-    <div class="player-dropdown ${isPlayerDropdownOpen ? 'open' : ''}">
-      <button type="button" class="player-dropdown-trigger">
-        <span class="player-dropdown-trigger-text">${escapeHtml(titleText)}</span>
-        <span class="player-dropdown-trigger-arrow">${isPlayerDropdownOpen ? '⌃' : '⌄'}</span>
-      </button>
+  const playerVideos = getVideosBySelectedPlayer(selectedAnime?.videos || []);
+  const seasons = getUniqueSeasons(playerVideos);
+  const showSeasonSelector = seasons.length > 1;
 
-      <div class="player-dropdown-menu">
-        <div class="player-dropdown-label">ОЗВУЧКИ</div>
-        <div class="player-dropdown-items">
-          ${players.map(player => `
-            <button
-              type="button"
-              class="player-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
-              data-player="${escapeHtml(player.name)}"
-            >
-              <span class="player-dropdown-item-title">Озвучка ${escapeHtml(player.name)} (${player.count} эп.)</span>
-              <span class="player-dropdown-item-count">${player.count}</span>
-            </button>
-          `).join('')}
+  if (!selectedSeason) {
+    selectedSeason = seasons[0]?.season || 1;
+  }
+
+  if (!seasons.find(s => s.season === selectedSeason)) {
+    selectedSeason = seasons[0]?.season || 1;
+  }
+
+  const currentSeason = seasons.find(s => s.season === selectedSeason) || seasons[0];
+  const seasonText = currentSeason
+    ? `${currentSeason.season} сезон`
+    : 'Выберите сезон';
+
+  playerList.innerHTML = `
+    <div class="selectors-row">
+      <div class="player-dropdown ${isPlayerDropdownOpen ? 'open' : ''}">
+        <button type="button" class="player-dropdown-trigger" data-dropdown="player">
+          <span class="player-dropdown-trigger-text">${escapeHtml(titleText)}</span>
+          <span class="player-dropdown-trigger-arrow">${isPlayerDropdownOpen ? '⌃' : '⌄'}</span>
+        </button>
+
+        <div class="player-dropdown-menu">
+          <div class="player-dropdown-label">ОЗВУЧКИ</div>
+          <div class="player-dropdown-items">
+            ${players.map(player => `
+              <button
+                type="button"
+                class="player-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
+                data-player="${escapeHtml(player.name)}"
+              >
+                <span class="player-dropdown-item-title">Озвучка ${escapeHtml(player.name)} (${player.count} эп.)</span>
+                <span class="player-dropdown-item-count">${player.count}</span>
+              </button>
+            `).join('')}
+          </div>
         </div>
       </div>
+
+      ${showSeasonSelector ? `
+        <div class="player-dropdown ${isSeasonDropdownOpen ? 'open' : ''}">
+          <button type="button" class="player-dropdown-trigger" data-dropdown="season">
+            <span class="player-dropdown-trigger-text">${escapeHtml(seasonText)}</span>
+            <span class="player-dropdown-trigger-arrow">${isSeasonDropdownOpen ? '⌃' : '⌄'}</span>
+          </button>
+
+          <div class="player-dropdown-menu">
+            <div class="player-dropdown-label">СЕЗОНЫ</div>
+            <div class="player-dropdown-items">
+              ${seasons.map(season => `
+                <button
+                  type="button"
+                  class="player-dropdown-item ${season.season === selectedSeason ? 'active' : ''}"
+                  data-season="${season.season}"
+                >
+                  <span class="player-dropdown-item-title">${season.season} сезон</span>
+                  <span class="player-dropdown-item-count">${season.count}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      ` : ''}
     </div>
   `;
 
-  const trigger = playerList.querySelector('.player-dropdown-trigger');
-  if (trigger) {
-    trigger.disabled = !canControl();
-    trigger.addEventListener('click', (event) => {
+  const playerTrigger = playerList.querySelector('[data-dropdown="player"]');
+  if (playerTrigger) {
+    playerTrigger.disabled = !canControl();
+    playerTrigger.addEventListener('click', (event) => {
       event.stopPropagation();
       if (!canControl()) return;
       isPlayerDropdownOpen = !isPlayerDropdownOpen;
+      isSeasonDropdownOpen = false;
       renderPlayers(selectedAnime?.videos || []);
     });
   }
 
-  playerList.querySelectorAll('.player-dropdown-item').forEach(btn => {
+  const seasonTrigger = playerList.querySelector('[data-dropdown="season"]');
+  if (seasonTrigger) {
+    seasonTrigger.disabled = !canControl();
+    seasonTrigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!canControl()) return;
+      isSeasonDropdownOpen = !isSeasonDropdownOpen;
+      isPlayerDropdownOpen = false;
+      renderPlayers(selectedAnime?.videos || []);
+    });
+  }
+
+  playerList.querySelectorAll('[data-player]').forEach(btn => {
     btn.disabled = !canControl();
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
       selectedPlayer = btn.dataset.player;
+      selectedSeason = null;
       isPlayerDropdownOpen = false;
+      isSeasonDropdownOpen = false;
+
+      const filteredByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
+      const seasonsAfterChange = getUniqueSeasons(filteredByPlayer);
+      selectedSeason = seasonsAfterChange[0]?.season || 1;
+
       renderPlayers(selectedAnime?.videos || []);
-      const videosByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
-      renderEpisodes(getUniqueEpisodes(videosByPlayer));
+
+      const filteredBySeason = getVideosBySelectedSeason(filteredByPlayer);
+      renderEpisodes(getUniqueEpisodes(filteredBySeason));
+    });
+  });
+
+  playerList.querySelectorAll('[data-season]').forEach(btn => {
+    btn.disabled = !canControl();
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      selectedSeason = Number(btn.dataset.season) || 1;
+      isSeasonDropdownOpen = false;
+      renderPlayers(selectedAnime?.videos || []);
+      const filteredByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
+      const filteredBySeason = getVideosBySelectedSeason(filteredByPlayer);
+      renderEpisodes(getUniqueEpisodes(filteredBySeason));
     });
   });
 }
@@ -675,12 +788,16 @@ function renderEpisodes(episodes) {
   if (!episodesList) return;
 
   if (!episodes.length) {
-    episodesList.innerHTML = `<div class="empty-state">Серий для этой озвучки нет</div>`;
+    episodesList.innerHTML = `<div class="empty-state">Серий для выбранного сезона нет</div>`;
     return;
   }
 
   episodesList.innerHTML = episodes.map(episode => `
-    <button type="button" class="episode-tile ${episode.episodeNumber === currentState.episodeNumber ? 'active' : ''}" data-episode="${episode.episodeNumber}">
+    <button
+      type="button"
+      class="episode-tile ${episode.episodeNumber === currentState.episodeNumber ? 'active' : ''}"
+      data-episode="${episode.episodeNumber}"
+    >
       ${episode.episodeNumber}
     </button>
   `).join('');
@@ -689,12 +806,14 @@ function renderEpisodes(episodes) {
     btn.disabled = !canControl();
     btn.addEventListener('click', () => {
       const episodeNumber = Number(btn.dataset.episode);
-      const videos = getVideosBySelectedPlayer(selectedAnime?.videos || []);
-      const episode = getUniqueEpisodes(videos).find(v => v.episodeNumber === episodeNumber);
+      const byPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
+      const bySeason = getVideosBySelectedSeason(byPlayer);
+      const episode = getUniqueEpisodes(bySeason).find(v => v.episodeNumber === episodeNumber);
       if (!episode) return;
 
       const embedUrl = getIframeUrl(episode);
-      const title = `${selectedAnime?.title || 'Аниме'} — серия ${episodeNumber}`;
+      const season = getSeasonNumber(episode);
+      const title = `${selectedAnime?.title || 'Аниме'} — сезон ${season}, серия ${episodeNumber}`;
 
       currentState = {
         animeId: selectedAnime?.animeId ?? null,
@@ -712,7 +831,7 @@ function renderEpisodes(episodes) {
 
       userInteractedWithPlayer = true;
       loadIframe(embedUrl, title);
-      renderEpisodes(getUniqueEpisodes(videos));
+      renderEpisodes(getUniqueEpisodes(bySeason));
 
       if (roomId !== 'solo') {
         socket.emit('change-video', {
@@ -815,12 +934,19 @@ async function selectAnime(itemOrAnimeUrl) {
     };
 
     selectedPlayer = null;
+    selectedSeason = null;
     isPlayerDropdownOpen = false;
+    isSeasonDropdownOpen = false;
     currentState.episodeNumber = null;
 
     renderSelectedAnimeInfo(selectedAnime);
     renderPlayers(selectedAnime.videos);
-    episodesList.innerHTML = `<div class="empty-state">Сначала выберите озвучку</div>`;
+
+    const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
+    const seasons = getUniqueSeasons(byPlayer);
+    selectedSeason = seasons[0]?.season || 1;
+    const bySeason = getVideosBySelectedSeason(byPlayer);
+    renderEpisodes(getUniqueEpisodes(bySeason));
   } catch (error) {
     if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = `<div>${escapeHtml(error.message || 'Ошибка')}</div>`;
     if (playerList) playerList.innerHTML = `<div class="empty-state">Не удалось загрузить озвучки</div>`;
@@ -843,8 +969,9 @@ document.addEventListener('click', (event) => {
   }
 
   const withinPlayerDropdown = event.target.closest('.player-dropdown');
-  if (!withinPlayerDropdown && isPlayerDropdownOpen) {
-    closePlayerDropdown();
+  if (!withinPlayerDropdown) {
+    if (isPlayerDropdownOpen) closePlayerDropdown();
+    if (isSeasonDropdownOpen) closeSeasonDropdown();
   }
 });
 

@@ -1152,3 +1152,14 @@ input::placeholder {
     padding: 14px 16px;
   }
 }
+.selectors-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.selectors-row .player-dropdown {
+  flex: 1 1 280px;
+  max-width: none;
+}
