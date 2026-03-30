@@ -1,0 +1,842 @@
+:root {
+  --room-panel-dark: #2d2d2d;
+  --room-panel-dark-2: #353535;
+  --room-input: #2a3758;
+  --room-text: #ffffff;
+  --room-muted: #aebad6;
+  --room-line: rgba(255, 255, 255, 0.08);
+  --room-yellow: #f59e0b;
+  --room-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  --room-accent: #ff626b;
+}
+
+.room-page {
+  min-height: 100vh;
+  background: #0b1020;
+  color: #fff;
+}
+
+.top-bar {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 18px;
+  background: #1a2540;
+  border-bottom: 1px solid var(--room-line);
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.top-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+}
+
+#roomTitle {
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.host-badge {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--room-yellow);
+  color: #1b1300;
+  font-weight: 800;
+}
+
+.room-layout-centered {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 16px;
+  min-height: calc(100vh - 72px);
+  padding: 12px;
+  align-items: start;
+}
+
+.player-area-centered {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.right-sidebar {
+  background: #17233c;
+  border: 1px solid var(--room-line);
+  border-radius: 18px;
+  padding: 14px;
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+  height: calc(100vh - 96px);
+  overflow-y: auto;
+}
+
+.center-search-panel,
+.selected-anime-panel {
+  position: relative;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--room-panel-dark);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.center-search-head h2,
+.selected-anime-panel h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.muted-text,
+.users-caption,
+.center-search-hint {
+  color: var(--room-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.users-caption {
+  margin: -4px 0 10px;
+}
+
+.center-search-box {
+  position: relative;
+  margin-top: 12px;
+}
+
+.center-search-input {
+  width: 100%;
+  height: 56px;
+  padding: 0 58px 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  outline: none;
+  background: var(--room-panel-dark-2);
+  color: #fff;
+  font-size: 18px;
+}
+
+.center-search-input:focus {
+  border-color: var(--room-accent);
+  box-shadow: 0 0 0 3px rgba(255, 98, 107, 0.15);
+}
+
+.center-search-input::placeholder {
+  color: #9d9d9d;
+}
+
+.center-search-icon {
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
+  font-size: 28px;
+  color: #9c9c9c;
+  pointer-events: none;
+}
+
+.center-search-status {
+  margin-top: 10px;
+}
+
+.search-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% - 8px);
+  left: 18px;
+  right: 18px;
+  z-index: 30;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--room-panel-dark-2);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-dropdown.visible {
+  display: block;
+}
+
+.search-result-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover,
+.search-result-item.active {
+  background: #414141;
+}
+
+.search-result-poster {
+  width: 32px;
+  height: 44px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: #111827;
+}
+
+.search-result-poster-empty {
+  background: #1f2937;
+}
+
+.search-result-content {
+  min-width: 0;
+}
+
+.search-result-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f2f2f2;
+  line-height: 1.15;
+  margin-bottom: 1px;
+  word-break: break-word;
+}
+
+.search-result-meta {
+  font-size: 10px;
+  color: #a5a5a5;
+  line-height: 1.1;
+}
+
+.search-results-toggle {
+  width: 100%;
+  border: none;
+  background: #3f3f3f;
+  color: #f3f3f3;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: 0.2s ease;
+}
+
+.search-results-toggle:hover {
+  background: #4a4a4a;
+}
+
+.selected-anime-info {
+  color: #dbe7ff;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.selected-anime-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.selected-anime-poster {
+  width: 180px;
+  height: 250px;
+  object-fit: cover;
+  border-radius: 14px;
+  background: #111827;
+  display: block;
+}
+
+.selected-anime-title {
+  margin: 0 0 10px;
+  font-size: 28px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.selected-anime-meta {
+  margin-bottom: 12px;
+  color: #ff8b92;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.selected-anime-description {
+  margin: 0;
+  line-height: 1.65;
+  font-size: 15px;
+  color: #d7d7d7;
+}
+
+.selected-anime-extra {
+  margin-top: 14px;
+  color: #9db4ff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.now-playing-bar {
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 12px;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.player-shell {
+  width: 100%;
+}
+
+.player-wrapper {
+  width: min(100%, 1460px);
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #000;
+  box-shadow: var(--room-shadow);
+}
+
+.player-wrapper iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 18px;
+  background: #000;
+  display: block;
+}
+
+.player-wrapper-overlay {
+  position: relative;
+}
+
+.player-top-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: auto;
+  max-width: calc(100% - 100px);
+}
+
+.player-overlay-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.overlay-dropdown {
+  position: relative;
+}
+
+.overlay-control-btn {
+  height: 32px;
+  min-width: 92px;
+  max-width: 118px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  background: rgba(20, 20, 20, 0.96);
+  color: #fff;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: 0.15s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.overlay-control-btn:hover {
+  background: rgba(32, 32, 32, 0.98);
+}
+
+.overlay-control-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.overlay-control-btn span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-control-arrow {
+  font-size: 11px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.overlay-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 130px;
+  background: rgba(20, 20, 20, 0.985);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.overlay-dropdown.open .overlay-dropdown-menu {
+  display: block;
+}
+
+.overlay-dropdown-menu-episodes {
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 120px));
+  display: none;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-content: start;
+}
+
+.overlay-dropdown.open .overlay-dropdown-menu-episodes {
+  display: grid;
+}
+
+.overlay-dropdown-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: 0.15s ease;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overlay-dropdown-item:hover {
+  background: #2a2a2a;
+}
+
+.overlay-dropdown-item.active {
+  background: #444b55;
+  color: #fff;
+}
+
+.overlay-dropdown-item-episode {
+  justify-content: center;
+  text-align: center;
+  padding: 8px 4px;
+  min-height: 34px;
+  font-weight: 700;
+  border-radius: 6px;
+}
+
+.overlay-item-count {
+  flex-shrink: 0;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #434343;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.next-episode-floating-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 7;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 14px 30px rgba(124, 58, 237, 0.35);
+  transition: 0.2s ease;
+}
+
+.next-episode-floating-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(124, 58, 237, 0.45);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  background: #05070d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  z-index: 1;
+}
+
+.placeholder h2 {
+  margin: 0 0 10px;
+  color: #9dc1f7;
+  font-size: 22px;
+}
+
+.placeholder p {
+  margin: 0;
+  color: #b7c2dc;
+  font-size: 16px;
+}
+
+.block {
+  margin-bottom: 16px;
+}
+
+.block h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #fff;
+}
+
+.empty-state {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #aebad6;
+  font-size: 14px;
+  text-align: center;
+}
+
+.users-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.user-item {
+  padding: 14px;
+  border-radius: 16px;
+  background: #243250;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.user-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.user-name {
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.host-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--room-yellow);
+  color: #1b1300;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.user-time {
+  flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe7ff;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-block {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 260px);
+}
+
+.chat-messages {
+  flex: 1;
+  min-height: 280px;
+  max-height: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
+.chat-message,
+.system-message {
+  padding: 12px 14px;
+  border-radius: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-message {
+  background: #243250;
+}
+
+.chat-message.self {
+  background: #3b2b6b;
+}
+
+.system-message {
+  background: #243250;
+  color: #9db4ff;
+  font-style: italic;
+}
+
+.chat-meta {
+  font-size: 12px;
+  color: #aebad6;
+  margin-bottom: 4px;
+}
+
+.chat-input-box {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-box input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  background: var(--room-input);
+  color: #fff;
+}
+
+.chat-input-box input::placeholder {
+  color: #9fb0d3;
+}
+
+#sendBtn {
+  min-width: 72px;
+}
+
+.cinema-mode .right-sidebar {
+  display: none;
+}
+
+.cinema-mode .room-layout-centered {
+  grid-template-columns: 1fr;
+}
+
+.cinema-mode .player-wrapper {
+  width: min(100%, 1600px);
+}
+
+@media (max-width: 1450px) {
+  .room-layout-centered {
+    grid-template-columns: minmax(0, 1fr) 310px;
+  }
+
+  .player-wrapper {
+    width: min(100%, 1320px);
+  }
+}
+
+@media (max-width: 1200px) {
+  .room-layout-centered {
+    grid-template-columns: 1fr;
+  }
+
+  .right-sidebar {
+    position: static;
+    top: auto;
+    height: auto;
+  }
+
+  .chat-block {
+    min-height: 420px;
+  }
+
+  .player-wrapper {
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .selected-anime-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .selected-anime-poster {
+    width: 180px;
+    height: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 12px;
+  }
+
+  .top-center {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  #roomTitle {
+    font-size: 18px;
+  }
+
+  .chat-input-box {
+    flex-direction: column;
+  }
+
+  #sendBtn {
+    width: 100%;
+  }
+
+  .user-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .user-time {
+    text-align: left;
+    width: fit-content;
+  }
+
+  .room-layout-centered {
+    padding: 10px;
+  }
+
+  .center-search-panel,
+  .selected-anime-panel {
+    padding: 14px;
+  }
+
+  .search-dropdown {
+    left: 14px;
+    right: 14px;
+  }
+
+  .center-search-input {
+    font-size: 16px;
+  }
+
+  .selected-anime-title {
+    font-size: 22px;
+  }
+
+  .player-wrapper {
+    border-radius: 14px;
+  }
+
+  .player-wrapper iframe,
+  .placeholder {
+    border-radius: 14px;
+  }
+
+  .player-top-overlay {
+    top: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .player-overlay-controls {
+    gap: 4px;
+  }
+
+  .overlay-control-btn {
+    height: 28px;
+    min-width: 78px;
+    max-width: 96px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .overlay-dropdown-menu-episodes {
+    min-width: 220px;
+    max-width: min(280px, calc(100vw - 40px));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .overlay-dropdown-item-episode {
+    min-height: 30px;
+    font-size: 11px;
+  }
+
+  .next-episode-floating-btn {
+    right: 12px;
+    bottom: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
