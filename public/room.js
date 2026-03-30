@@ -259,7 +259,7 @@ function findDefaultContext(videos) {
 }
 
 function getCurrentEpisodeList() {
-  if (!selectedAnime?.videos?.length) return [];
+  if (!selectedAnime?.videos?.length || !selectedPlayer) return [];
   const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
   const bySeason = getVideosBySelectedSeason(byPlayer);
   return getUniqueEpisodes(bySeason);
@@ -288,9 +288,8 @@ function ensureNextEpisodeButton() {
   nextEpisodeButton.textContent = 'Следующая серия';
 
   nextEpisodeButton.addEventListener('click', () => {
-    if (!canControl()) return;
     const nextEpisode = getNextEpisode();
-    if (!nextEpisode || !selectedAnime) return;
+    if (!nextEpisode || !selectedAnime || !canControl()) return;
     hideNextEpisodeButton();
     launchEpisode(nextEpisode, selectedAnime);
   });
@@ -302,8 +301,10 @@ function ensureNextEpisodeButton() {
 function showNextEpisodeButton() {
   const btn = ensureNextEpisodeButton();
   if (!btn) return;
+
   const nextEpisode = getNextEpisode();
   if (!nextEpisode || !canControl()) return;
+
   btn.classList.remove('hidden');
 }
 
@@ -317,7 +318,7 @@ function updateNextEpisodeVisibility() {
   const hasCurrentTime = typeof currentState.playback.currentTime === 'number' && currentState.playback.currentTime >= 0;
   const nextEpisode = getNextEpisode();
 
-  if (!hasDuration || !hasCurrentTime || !nextEpisode) {
+  if (!hasDuration || !hasCurrentTime || !nextEpisode || !canControl()) {
     hideNextEpisodeButton();
     return;
   }
@@ -360,11 +361,7 @@ function updateControlState() {
   overlaySeasonMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
   overlayEpisodeMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
 
-  if (!canControl()) {
-    hideNextEpisodeButton();
-  } else {
-    updateNextEpisodeVisibility();
-  }
+  updateNextEpisodeVisibility();
 }
 
 function showPlaceholder(title = 'Ничего не выбрано', description = 'Выберите аниме') {
