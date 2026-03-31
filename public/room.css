@@ -342,18 +342,21 @@
 
 .player-top-overlay {
   position: absolute;
-  top: 10px;
-  left: 78px;
-  z-index: 8;
+  top: 12px;
+  right: 12px;
+  left: auto;
+  z-index: 20;
   display: flex;
   align-items: flex-start;
+  justify-content: flex-end;
   pointer-events: auto;
-  max-width: calc(100% - 120px);
+  max-width: calc(100% - 24px);
 }
 
 .player-overlay-controls {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   flex-wrap: nowrap;
 }
@@ -363,12 +366,12 @@
 }
 
 .overlay-control-btn {
-  height: 32px;
+  height: 34px;
   min-width: 96px;
-  max-width: 138px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 6px;
-  background: rgba(28, 28, 28, 0.96);
+  max-width: 160px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(20, 24, 34, 0.96);
   color: #fff;
   padding: 0 10px;
   display: inline-flex;
@@ -381,10 +384,11 @@
   line-height: 1;
   transition: 0.15s ease;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
 }
 
 .overlay-control-btn:hover {
-  background: rgba(40, 40, 40, 1);
+  background: rgba(34, 39, 54, 0.98);
 }
 
 .overlay-control-btn:disabled {
@@ -408,7 +412,8 @@
   display: none;
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
+  left: auto;
   min-width: 130px;
   background: rgba(18, 18, 18, 0.99);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -425,7 +430,7 @@
 
 .overlay-dropdown-menu-episodes {
   min-width: 280px;
-  max-width: min(420px, calc(100vw - 120px));
+  max-width: min(420px, calc(100vw - 32px));
   display: none;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
@@ -739,11 +744,6 @@
     gap: 20px;
     padding: 16px;
   }
-
-  .player-top-overlay {
-    left: 86px;
-    max-width: calc(100% - 140px);
-  }
 }
 
 @media (min-width: 2560px) {
@@ -757,15 +757,10 @@
     height: calc(100vh - 112px);
   }
 
-  .player-top-overlay {
-    top: 12px;
-    left: 92px;
-  }
-
   .overlay-control-btn {
-    height: 34px;
+    height: 36px;
     min-width: 108px;
-    max-width: 150px;
+    max-width: 170px;
     font-size: 13px;
   }
 }
@@ -882,8 +877,9 @@
 
   .player-top-overlay {
     top: 8px;
-    left: 64px;
-    max-width: calc(100% - 84px);
+    right: 8px;
+    left: auto;
+    max-width: calc(100% - 16px);
   }
 
   .player-overlay-controls {
@@ -891,16 +887,16 @@
   }
 
   .overlay-control-btn {
-    height: 28px;
+    height: 30px;
     min-width: 74px;
-    max-width: 96px;
+    max-width: 102px;
     padding: 0 8px;
     font-size: 11px;
   }
 
   .overlay-dropdown-menu-episodes {
     min-width: 220px;
-    max-width: min(280px, calc(100vw - 40px));
+    max-width: min(280px, calc(100vw - 24px));
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
   }

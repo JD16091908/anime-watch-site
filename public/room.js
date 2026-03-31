@@ -143,8 +143,6 @@ let isOverlayPlayerOpen = false;
 let isOverlaySeasonOpen = false;
 let isOverlayEpisodeOpen = false;
 
-let lastSeriesChatMessage = '';
-let lastSeriesChatMessageAt = 0;
 let lastSentSeekAt = 0;
 
 let currentState = {
@@ -221,35 +219,6 @@ function sys(text) {
   if (chatMessages && window.ChatModule) {
     ChatModule.appendSystemMessage(chatMessages, text);
   }
-}
-
-function addSeriesMessageToChat(title) {
-  if (!title || !chatMessages || !window.ChatModule) return;
-
-  const text = roomId === 'solo'
-    ? `Вы выбрали: ${title}`
-    : `Хост выбрал: ${title}`;
-
-  const now = Date.now();
-  const isDuplicate =
-    lastSeriesChatMessage === text &&
-    now - lastSeriesChatMessageAt < 5000;
-
-  if (isDuplicate) return;
-
-  lastSeriesChatMessage = text;
-  lastSeriesChatMessageAt = now;
-
-  ChatModule.appendSystemMessage(chatMessages, text);
-}
-
-function resetLastSeriesMessage(title = '') {
-  lastSeriesChatMessage = title ? (
-    roomId === 'solo'
-      ? `Вы выбрали: ${title}`
-      : `Хост выбрал: ${title}`
-  ) : '';
-  lastSeriesChatMessageAt = Date.now();
 }
 
 function escapeHtml(value) {
@@ -1012,10 +981,6 @@ function launchEpisode(episode, anime) {
   loadIframe(embedUrl);
   renderOverlayControls();
 
-  if (roomId === 'solo') {
-    addSeriesMessageToChat(title);
-  }
-
   if (roomId !== 'solo') {
     socket.emit('change-video', {
       roomId,
@@ -1025,6 +990,8 @@ function launchEpisode(episode, anime) {
       animeUrl: currentState.animeUrl,
       episodeNumber
     });
+  } else {
+    sys(`Вы выбрали: ${title}`);
   }
 }
 
@@ -1323,8 +1290,6 @@ socket.on('sync-state', (state) => {
     }
   };
 
-  resetLastSeriesMessage(currentState.title);
-
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
 
@@ -1362,7 +1327,6 @@ socket.on('video-changed', (state) => {
 
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
-    addSeriesMessageToChat(currentState.title);
   } else {
     showPlaceholder('Ничего не выбрано', 'Хост пока не запустил тайтл');
   }
