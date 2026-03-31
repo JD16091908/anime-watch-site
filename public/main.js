@@ -43,3 +43,32 @@ document.getElementById('soloWatchBtn').addEventListener('click', () => {
   const username = getUsername();
   window.location.href = `/room/solo?username=${encodeURIComponent(username)}`;
 });
+
+const aboutServiceBtn = document.getElementById('aboutServiceBtn');
+const aboutModal = document.getElementById('aboutModal');
+const aboutModalBackdrop = document.getElementById('aboutModalBackdrop');
+const closeAboutModalBtn = document.getElementById('closeAboutModalBtn');
+
+function openAboutModal() {
+  if (!aboutModal) return;
+  aboutModal.classList.remove('hidden');
+  aboutModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+}
+
+function closeAboutModal() {
+  if (!aboutModal) return;
+  aboutModal.classList.add('hidden');
+  aboutModal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+}
+
+aboutServiceBtn?.addEventListener('click', openAboutModal);
+aboutModalBackdrop?.addEventListener('click', closeAboutModal);
+closeAboutModalBtn?.addEventListener('click', closeAboutModal);
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeAboutModal();
+  }
+});

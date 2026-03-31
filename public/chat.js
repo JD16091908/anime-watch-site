@@ -11,25 +11,23 @@ window.ChatModule = (() => {
     const urlRegex = /(https?:\/\/[^\s<]+)/g;
     return escaped.replace(
       urlRegex,
-      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #4da6ff; text-decoration: none;">$1</a>'
+      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #8db8ff; text-decoration: none;">$1</a>'
     );
   }
 
-  function isNearBottom(chatMessages) {
-    if (!chatMessages) return true;
-    const threshold = 80;
-    return chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < threshold;
-  }
-
-  function scrollToBottom(chatMessages, force = false) {
+  function forceScrollToBottom(chatMessages) {
     if (!chatMessages) return;
 
-    const shouldScroll = force || isNearBottom(chatMessages);
-    if (!shouldScroll) return;
-
-    requestAnimationFrame(() => {
+    const scroll = () => {
       chatMessages.scrollTop = chatMessages.scrollHeight;
-    });
+    };
+
+    scroll();
+    requestAnimationFrame(scroll);
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+    setTimeout(scroll, 0);
+    setTimeout(scroll, 50);
+    setTimeout(scroll, 150);
   }
 
   function appendMessage(chatMessages, { username, message, time, isSelf = false }) {
@@ -53,7 +51,7 @@ window.ChatModule = (() => {
     div.appendChild(body);
     chatMessages.appendChild(div);
 
-    scrollToBottom(chatMessages);
+    forceScrollToBottom(chatMessages);
   }
 
   function appendSystemMessage(chatMessages, text) {
@@ -64,12 +62,14 @@ window.ChatModule = (() => {
     div.innerHTML = `<em>${escapeHtml(text)}</em>`;
 
     chatMessages.appendChild(div);
-    scrollToBottom(chatMessages);
+
+    forceScrollToBottom(chatMessages);
   }
 
   function clearChat(chatMessages) {
     if (!chatMessages) return;
     chatMessages.innerHTML = '';
+    forceScrollToBottom(chatMessages);
   }
 
   return {
@@ -77,6 +77,6 @@ window.ChatModule = (() => {
     appendSystemMessage,
     clearChat,
     escapeHtml,
-    scrollToBottom
+    scrollToBottom: forceScrollToBottom
   };
 })();
