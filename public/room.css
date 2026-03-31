@@ -912,3 +912,66 @@
     max-height: 260px;
   }
 }
+/* КРАСИВЫЕ ТЁМНЫЕ СКРОЛЛБАРЫ ПОД СТИЛЬ САЙТА */
+.right-sidebar,
+.chat-messages,
+.search-dropdown,
+.overlay-dropdown-menu,
+.overlay-dropdown-menu-episodes {
+  scrollbar-width: thin;
+  scrollbar-color: #3b4a6a #111a2d;
+  scrollbar-gutter: stable;
+}
+
+/* Chrome, Edge, Opera, Safari */
+.right-sidebar::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar,
+.search-dropdown::-webkit-scrollbar,
+.overlay-dropdown-menu::-webkit-scrollbar,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.right-sidebar::-webkit-scrollbar-track,
+.chat-messages::-webkit-scrollbar-track,
+.search-dropdown::-webkit-scrollbar-track,
+.overlay-dropdown-menu::-webkit-scrollbar-track,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar-track {
+  background: #111a2d;
+  border-radius: 999px;
+}
+
+.right-sidebar::-webkit-scrollbar-thumb,
+.chat-messages::-webkit-scrollbar-thumb,
+.search-dropdown::-webkit-scrollbar-thumb,
+.overlay-dropdown-menu::-webkit-scrollbar-thumb,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #44557a 0%, #33415d 100%);
+  border-radius: 999px;
+  border: 2px solid #111a2d;
+}
+
+.right-sidebar::-webkit-scrollbar-thumb:hover,
+.chat-messages::-webkit-scrollbar-thumb:hover,
+.search-dropdown::-webkit-scrollbar-thumb:hover,
+.overlay-dropdown-menu::-webkit-scrollbar-thumb:hover,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #556a96 0%, #415274 100%);
+}
+
+.right-sidebar::-webkit-scrollbar-thumb:active,
+.chat-messages::-webkit-scrollbar-thumb:active,
+.search-dropdown::-webkit-scrollbar-thumb:active,
+.overlay-dropdown-menu::-webkit-scrollbar-thumb:active,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #6076a3 0%, #4b5f86 100%);
+}
+
+.right-sidebar::-webkit-scrollbar-corner,
+.chat-messages::-webkit-scrollbar-corner,
+.search-dropdown::-webkit-scrollbar-corner,
+.overlay-dropdown-menu::-webkit-scrollbar-corner,
+.overlay-dropdown-menu-episodes::-webkit-scrollbar-corner {
+  background: #111a2d;
+}
