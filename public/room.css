@@ -17,12 +17,12 @@
 }
 
 .top-bar {
-  height: 72px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 18px;
+  gap: 14px;
+  padding: 0 16px;
   background: #1a2540;
   border-bottom: 1px solid var(--room-line);
 }
@@ -36,14 +36,14 @@
 .top-center {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
   flex: 1;
   min-width: 0;
 }
 
 #roomTitle {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
@@ -53,7 +53,7 @@
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .room-support-btn {
@@ -65,39 +65,28 @@
   background: linear-gradient(90deg, rgba(123, 140, 255, 0.28) 0%, rgba(255, 132, 168, 0.28) 100%);
 }
 
-.room-thanks-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.08);
-}
-
-.room-thanks-btn:hover {
-  background: rgba(255,255,255,0.12);
-}
-
 .host-badge {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 12px;
   background: var(--room-yellow);
   color: #1b1300;
   font-weight: 800;
+  font-size: 14px;
 }
 
 .room-layout-centered {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
-  gap: 16px;
-  min-height: calc(100vh - 72px);
-  padding: 12px;
+  gap: 14px;
+  min-height: calc(100vh - 64px);
+  padding: 10px;
   align-items: start;
 }
 
 .player-area-centered {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -108,8 +97,8 @@
   padding: 14px;
   min-width: 0;
   position: sticky;
-  top: 12px;
-  height: calc(100vh - 96px);
+  top: 10px;
+  height: calc(100vh - 84px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -118,7 +107,7 @@
 .center-search-panel,
 .selected-anime-panel {
   position: relative;
-  padding: 18px;
+  padding: 14px 16px;
   border-radius: 18px;
   background: var(--room-panel-dark);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -127,7 +116,7 @@
 .center-search-head h2,
 .selected-anime-panel h2 {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 17px;
   color: #fff;
 }
 
@@ -145,12 +134,12 @@
 
 .center-search-box {
   position: relative;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .center-search-input {
   width: 100%;
-  height: 58px;
+  height: 56px;
   padding: 0 60px 0 18px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -188,8 +177,8 @@
   display: none;
   position: absolute;
   top: calc(100% - 8px);
-  left: 18px;
-  right: 18px;
+  left: 16px;
+  right: 16px;
   z-index: 30;
   border-radius: 14px;
   overflow: hidden;
@@ -285,14 +274,14 @@
 
 .selected-anime-layout {
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 18px;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
   align-items: start;
 }
 
 .selected-anime-poster {
-  width: 180px;
-  height: 250px;
+  width: 160px;
+  height: 224px;
   object-fit: cover;
   border-radius: 14px;
   background: #111827;
@@ -301,7 +290,7 @@
 
 .selected-anime-title {
   margin: 0 0 10px;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.2;
   color: #fff;
 }
@@ -332,7 +321,7 @@
 }
 
 .player-shell-raised {
-  margin-top: -6px;
+  margin-top: -2px;
 }
 
 .player-wrapper {
@@ -364,15 +353,15 @@
 
 .player-top-overlay {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   left: auto;
   z-index: 20;
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
   pointer-events: auto;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 20px);
 }
 
 .player-overlay-controls {
@@ -818,8 +807,8 @@
   }
 
   .selected-anime-poster {
-    width: 180px;
-    height: 250px;
+    width: 160px;
+    height: 224px;
   }
 }
 
@@ -827,7 +816,8 @@
   .top-bar {
     flex-wrap: wrap;
     height: auto;
-    padding: 12px;
+    padding: 10px;
+    gap: 10px;
   }
 
   .top-center {
@@ -837,7 +827,7 @@
   }
 
   #roomTitle {
-    font-size: 18px;
+    font-size: 17px;
   }
 
   .top-actions {
@@ -846,9 +836,14 @@
     flex-wrap: wrap;
   }
 
-  .room-support-btn,
-  .room-thanks-btn {
-    flex: 1 1 calc(50% - 6px);
+  .room-support-btn {
+    flex: 1 1 100%;
+    height: 38px;
+  }
+
+  .host-badge {
+    padding: 7px 10px;
+    font-size: 13px;
   }
 
   .chat-input-box {
@@ -878,41 +873,47 @@
   }
 
   .room-layout-centered {
-    padding: 10px;
+    padding: 8px;
+    gap: 10px;
   }
 
   .center-search-panel,
   .selected-anime-panel {
-    padding: 14px;
+    padding: 12px;
   }
 
   .search-dropdown {
-    left: 14px;
-    right: 14px;
+    left: 12px;
+    right: 12px;
   }
 
   .center-search-input {
     font-size: 16px;
+    height: 52px;
   }
 
   .selected-anime-title {
     font-size: 22px;
   }
 
+  .player-shell-raised {
+    margin-top: 0;
+  }
+
   .player-wrapper {
-    border-radius: 14px;
+    border-radius: 12px;
   }
 
   .player-wrapper iframe,
   .placeholder {
-    border-radius: 14px;
+    border-radius: 12px;
   }
 
   .player-top-overlay {
-    top: 8px;
-    right: 8px;
+    top: 6px;
+    right: 6px;
     left: auto;
-    max-width: calc(100% - 16px);
+    max-width: calc(100% - 12px);
   }
 
   .player-overlay-controls {
@@ -920,16 +921,16 @@
   }
 
   .overlay-control-btn {
-    height: 30px;
-    min-width: 74px;
-    max-width: 102px;
-    padding: 0 8px;
-    font-size: 11px;
+    height: 28px;
+    min-width: 68px;
+    max-width: 96px;
+    padding: 0 7px;
+    font-size: 10px;
   }
 
   .overlay-dropdown-menu-episodes {
     min-width: 220px;
-    max-width: min(280px, calc(100vw - 24px));
+    max-width: min(280px, calc(100vw - 20px));
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
   }

@@ -300,6 +300,7 @@ input {
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: var(--shadow-md);
   transition: 0.25s ease;
+  min-height: 220px;
 }
 
 .home-info-card:hover {
@@ -727,7 +728,7 @@ input {
 
 @media (max-width: 768px) {
   .main-page {
-    padding: 12px 12px 88px;
+    padding: 12px 12px 92px;
   }
 
   .site-header {
@@ -777,26 +778,47 @@ input {
     width: 100%;
   }
 
+  .home-info-card {
+    min-height: auto;
+    padding: 18px;
+  }
+
+  .home-info-card h3 {
+    font-size: 19px;
+  }
+
+  .home-info-card p {
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
   .floating-menu {
     left: 12px;
     right: 12px;
-    bottom: 12px;
+    bottom: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+
+  .floating-menu .thanks-service-btn {
+    grid-column: 1 / -1;
   }
 
   .about-service-btn {
     width: 100%;
     justify-content: center;
-    min-height: 44px;
-    padding: 0 14px;
-    font-size: 16px;
-    border-radius: 16px;
+    min-height: 42px;
+    padding: 0 12px;
+    font-size: 14px;
+    border-radius: 14px;
+    gap: 8px;
   }
 
   .about-service-icon {
-    width: 22px;
-    height: 22px;
-    font-size: 12px;
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
   }
 
   .about-modal-dialog {
