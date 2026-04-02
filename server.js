@@ -19,6 +19,7 @@ const rooms = {};
 
 const KODIK_TOKEN = process.env.KODIK_TOKEN || 'ea55976b6acc94f41f173e2c702ebf6b';
 const KODIK_API_BASE = 'https://kodik-api.com';
+const SHIKIMORI_API_BASE = 'https://shikimori.one/api';
 
 console.log(KODIK_TOKEN ? '✅ KODIK TOKEN загружен' : '❌ KODIK TOKEN не найден');
 
@@ -68,6 +69,27 @@ async function kodikGet(endpoint, params = {}) {
 
   if (data?.failed) throw new Error(data.failed);
   return data;
+}
+
+async function shikimoriGet(endpoint) {
+  const response = await fetch(`${SHIKIMORI_API_BASE}${endpoint}`, {
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'Anivmeste/1.0'
+    }
+  });
+
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Shikimori HTTP ${response.status}: ${text.slice(0, 300)}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid Shikimori JSON: ${text.slice(0, 300)}`);
+  }
 }
 
 function normalizePoster(item) {
@@ -524,6 +546,156 @@ async function fetchAnimeBySelection(selected) {
 
   return [];
 }
+
+function normalizeShikiType(kind) {
+  const value = String(kind || '').toLowerCase();
+
+  if (value === 'tv') return 'TV';
+  if (value === 'movie') return 'Movie';
+  if (value === 'ova') return 'OVA';
+  if (value === 'ona') return 'ONA';
+  if (value === 'special') return 'Special';
+  if (value === 'music') return 'Music';
+  return value ? value.toUpperCase() : 'Anime';
+}
+
+function relationLabel(relation) {
+  const rel = String(relation || '').toLowerCase();
+
+  if (rel === 'prequel') return 'Приквел';
+  if (rel === 'sequel') return 'Продолжение';
+  if (rel === 'side_story') return 'Побочная история';
+  if (rel === 'alternative_version') return 'Альтернативная версия';
+  if (rel === 'alternative_setting') return 'Альтернативный сеттинг';
+  if (rel === 'full_story') return 'Полная история';
+  if (rel === 'parent_story') return 'Основная история';
+  if (rel === 'summary') return 'Рекап';
+  if (rel === 'character') return 'Персонажи';
+  if (rel === 'spin_off') return 'Спин-офф';
+  if (rel === 'other') return 'Другое';
+
+  return rel || 'Связано';
+}
+
+function watchOrderPriority(entry) {
+  const rel = String(entry.relation || '').toLowerCase();
+  const kind = String(entry.kind || '').toLowerCase();
+
+  if (rel === 'prequel') return 10;
+  if (rel === 'parent_story') return 20;
+  if (rel === 'full_story') return 30;
+  if (rel === 'other' && kind === 'tv') return 40;
+  if (rel === 'side_story' && kind === 'tv') return 50;
+  if (rel === 'alternative_version') return 60;
+  if (rel === 'sequel') return 70;
+  if (rel === 'spin_off') return 80;
+  if (kind === 'movie') return 90;
+  if (kind === 'ova' || kind === 'ona') return 100;
+  if (kind === 'special') return 110;
+  if (rel === 'summary') return 120;
+  return 95;
+}
+
+async function buildWatchOrder(shikimoriId) {
+  const [animeData, relatedData] = await Promise.all([
+    shikimoriGet(`/animes/${shikimoriId}`),
+    shikimoriGet(`/animes/${shikimoriId}/related`)
+  ]);
+
+  const currentEntry = {
+    shikimoriId: animeData.id,
+    title: animeData.russian || animeData.name || 'Без названия',
+    year: animeData.aired_on ? Number(String(animeData.aired_on).slice(0, 4)) || null : null,
+    kind: animeData.kind || '',
+    relation: 'current',
+    relationLabel: 'Выбранный тайтл',
+    status: animeData.status || '',
+    poster: animeData.image?.original ? `https://shikimori.one${animeData.image.original}` : '',
+    animeUrl: `shikimori:${animeData.id}`,
+    animeId: `shikimori:${animeData.id}`,
+    isCurrent: true
+  };
+
+  const relatedItems = Array.isArray(relatedData) ? relatedData : [];
+
+  const normalizedRelated = relatedItems
+    .map(item => {
+      const anime = item?.anime;
+      if (!anime?.id) return null;
+
+      return {
+        shikimoriId: anime.id,
+        title: anime.russian || anime.name || 'Без названия',
+        year: anime.aired_on ? Number(String(anime.aired_on).slice(0, 4)) || null : null,
+        kind: anime.kind || '',
+        relation: item.relation || 'other',
+        relationLabel: relationLabel(item.relation),
+        status: anime.status || '',
+        poster: anime.image?.original ? `https://shikimori.one${anime.image.original}` : '',
+        animeUrl: `shikimori:${anime.id}`,
+        animeId: `shikimori:${anime.id}`,
+        isCurrent: false
+      };
+    })
+    .filter(Boolean);
+
+  const merged = [currentEntry, ...normalizedRelated];
+  const uniq = new Map();
+
+  for (const item of merged) {
+    if (!uniq.has(item.shikimoriId)) {
+      uniq.set(item.shikimoriId, item);
+    }
+  }
+
+  const finalItems = [...uniq.values()].sort((a, b) => {
+    const priorityA = a.isCurrent ? 45 : watchOrderPriority(a);
+    const priorityB = b.isCurrent ? 45 : watchOrderPriority(b);
+
+    if (priorityA !== priorityB) return priorityA - priorityB;
+
+    const yearA = Number(a.year) || 9999;
+    const yearB = Number(b.year) || 9999;
+
+    if (yearA !== yearB) return yearA - yearB;
+
+    return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
+  });
+
+  return {
+    current: currentEntry,
+    items: finalItems.map((item, index) => ({
+      order: index + 1,
+      shikimoriId: item.shikimoriId,
+      animeId: item.animeId,
+      animeUrl: item.animeUrl,
+      title: item.title,
+      year: item.year,
+      kind: normalizeShikiType(item.kind),
+      relation: item.relation,
+      relationLabel: item.relationLabel,
+      status: item.status,
+      poster: item.poster,
+      isCurrent: item.isCurrent
+    }))
+  };
+}
+
+app.get('/api/watch-order', async (req, res) => {
+  try {
+    const shikimoriId = Number(req.query.shikimoriId);
+
+    if (!shikimoriId || Number.isNaN(shikimoriId)) {
+      return res.status(400).json({ error: 'Некорректный shikimoriId' });
+    }
+
+    const data = await buildWatchOrder(shikimoriId);
+    res.json(data);
+  } catch (error) {
+    console.error('WATCH ORDER ERROR:', error.message);
+    res.status(500).json({ error: 'Не удалось загрузить порядок просмотра', details: error.message });
+  }
+});
 
 app.get('/api/health/kodik', async (req, res) => {
   try {

@@ -1090,3 +1090,118 @@
 .overlay-dropdown-menu-episodes::-webkit-scrollbar-corner {
   background: #111a2d;
 }
+.watch-order-block {
+  margin-top: 18px;
+  padding-top: 2px;
+}
+
+.watch-order-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #2fd67b 0%, #44d68f 100%);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.watch-order-toggle:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.watch-order-toggle-arrow {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.watch-order-list {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.watch-order-list.collapsed {
+  display: none;
+}
+
+.watch-order-list.expanded {
+  display: block;
+}
+
+.watch-order-item {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.watch-order-item:last-child {
+  border-bottom: none;
+}
+
+.watch-order-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.watch-order-item.current {
+  background: rgba(123, 140, 255, 0.12);
+}
+
+.watch-order-item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.watch-order-item-index {
+  color: #dfe8ff;
+  font-weight: 800;
+}
+
+.watch-order-item-title {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.watch-order-item-meta {
+  color: #c7d3ee;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (max-width: 768px) {
+  .watch-order-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .watch-order-item {
+    padding: 11px 12px;
+  }
+
+  .watch-order-item-title {
+    font-size: 15px;
+  }
+
+  .watch-order-item-meta {
+    font-size: 13px;
+  }
+}

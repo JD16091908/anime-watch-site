@@ -135,6 +135,7 @@ let hasShownHostMessage = false;
 let lastKnownHostTime = null;
 let lastKnownHostTimeAt = 0;
 let hasShownFirstEpisodeHint = false;
+let watchOrderExpanded = true;
 
 let isOverlayPlayerOpen = false;
 let isOverlaySeasonOpen = false;
@@ -831,12 +832,102 @@ function renderUsers(users) {
   }).join('');
 }
 
-function renderSelectedAnimeInfo(anime) {
+async function loadWatchOrder(shikimoriId) {
+  if (!shikimoriId) return null;
+
+  try {
+    const response = await fetch(`/api/watch-order?shikimoriId=${encodeURIComponent(shikimoriId)}`);
+    const data = await readJsonSafely(response);
+    if (!response.ok) throw new Error(data?.error || 'Не удалось загрузить порядок просмотра');
+    return data;
+  } catch (error) {
+    console.error('WATCH ORDER FRONT ERROR:', error);
+    return null;
+  }
+}
+
+function renderWatchOrderBlock(watchOrderData) {
+  if (!watchOrderData?.items?.length) return '';
+
+  return `
+    <div class="watch-order-block">
+      <button type="button" class="watch-order-toggle ${watchOrderExpanded ? 'expanded' : ''}" id="watchOrderToggleBtn">
+        <span>Порядок просмотра</span>
+        <span class="watch-order-toggle-arrow">${watchOrderExpanded ? '⌃' : '⌄'}</span>
+      </button>
+
+      <div class="watch-order-list ${watchOrderExpanded ? 'expanded' : 'collapsed'}" id="watchOrderList">
+        ${watchOrderData.items.map(item => `
+          <button
+            type="button"
+            class="watch-order-item ${item.isCurrent ? 'current' : ''}"
+            data-watch-order-item="1"
+            data-shikimori-id="${escapeHtml(item.shikimoriId)}"
+            data-anime-id="${escapeHtml(item.animeId)}"
+            data-anime-url="${escapeHtml(item.animeUrl)}"
+            data-title="${escapeHtml(item.title)}"
+            data-year="${escapeHtml(item.year || '')}"
+          >
+            <div class="watch-order-item-main">
+              <span class="watch-order-item-index">${item.order}.</span>
+              <span class="watch-order-item-title">${escapeHtml(item.title)}</span>
+            </div>
+            <div class="watch-order-item-meta">
+              ${escapeHtml(item.kind)}${item.relationLabel ? `, ${escapeHtml(item.relationLabel)}` : ''}${item.year ? `, ${escapeHtml(item.year)}` : ''}
+            </div>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function bindWatchOrderEvents() {
+  const toggleBtn = document.getElementById('watchOrderToggleBtn');
+  const listEl = document.getElementById('watchOrderList');
+
+  if (toggleBtn && listEl) {
+    toggleBtn.addEventListener('click', () => {
+      watchOrderExpanded = !watchOrderExpanded;
+      listEl.classList.toggle('expanded', watchOrderExpanded);
+      listEl.classList.toggle('collapsed', !watchOrderExpanded);
+      toggleBtn.classList.toggle('expanded', watchOrderExpanded);
+
+      const arrow = toggleBtn.querySelector('.watch-order-toggle-arrow');
+      if (arrow) {
+        arrow.textContent = watchOrderExpanded ? '⌃' : '⌄';
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-watch-order-item="1"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!canControl()) return;
+
+      const item = {
+        animeId: btn.dataset.animeId,
+        animeUrl: btn.dataset.animeUrl,
+        title: btn.dataset.title,
+        year: btn.dataset.year || '',
+        shikimoriId: Number(btn.dataset.shikimoriId) || null,
+        kodikId: null
+      };
+
+      await selectAnime(item);
+    });
+  });
+}
+
+async function renderSelectedAnimeInfo(anime) {
   if (!selectedAnimeInfo) return;
 
   const players = getUniquePlayers(anime?.videos || []);
   const seasons = getUniqueSeasons(anime?.videos || []);
   const episodes = getUniqueEpisodes(anime?.videos || []);
+
+  const watchOrderData = anime?.shikimoriId
+    ? await loadWatchOrder(anime.shikimoriId)
+    : null;
 
   selectedAnimeInfo.innerHTML = `
     <div class="selected-anime-layout">
@@ -850,9 +941,12 @@ function renderSelectedAnimeInfo(anime) {
         <div class="selected-anime-extra">
           Озвучек: ${players.length} • Сезонов: ${seasons.length} • Серий: ${episodes.length}
         </div>
+        ${renderWatchOrderBlock(watchOrderData)}
       </div>
     </div>
   `;
+
+  bindWatchOrderEvents();
 }
 
 function renderAnimeResults(items) {
@@ -1198,13 +1292,14 @@ async function selectAnime(itemOrAnimeUrl) {
 
     selectedAnime = {
       ...data,
+      shikimoriId: selectedItem.shikimoriId || data.shikimoriId || null,
       videos: Array.isArray(data?.videos) ? data.videos : []
     };
 
     const context = findDefaultContext(selectedAnime.videos);
 
     if (!context) {
-      renderSelectedAnimeInfo(selectedAnime);
+      await renderSelectedAnimeInfo(selectedAnime);
       showPlaceholder('Нет доступных серий', 'Для выбранного тайтла не удалось найти рабочий плеер');
       return;
     }
@@ -1212,7 +1307,7 @@ async function selectAnime(itemOrAnimeUrl) {
     selectedPlayer = context.player;
     selectedSeason = context.season;
 
-    renderSelectedAnimeInfo(selectedAnime);
+    await renderSelectedAnimeInfo(selectedAnime);
     renderOverlayControls();
     launchEpisode(context.episode, selectedAnime);
   } catch (error) {
