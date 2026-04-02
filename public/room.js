@@ -442,6 +442,7 @@ function showPlaceholder(title = 'Ничего не выбрано', description
   if (oldFrame) oldFrame.remove();
 
   if (placeholder) {
+    placeholder.className = 'placeholder';
     placeholder.style.display = 'flex';
     placeholder.innerHTML = `<div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p></div>`;
   }
@@ -453,6 +454,7 @@ function showPlaceholder(title = 'Ничего не выбрано', description
 function showViewerHint(text = 'Если видео не стартовало автоматически, кликните по плееру один раз. После этого play/pause будут работать лучше.') {
   if (isHost || roomId === 'solo' || !placeholder) return;
 
+  placeholder.className = 'placeholder placeholder-click-through';
   placeholder.style.display = 'flex';
   placeholder.innerHTML = `
     <div>
@@ -460,6 +462,12 @@ function showViewerHint(text = 'Если видео не стартовало а
       <p>${escapeHtml(text)}</p>
     </div>
   `;
+}
+
+function hideViewerHintOverlay() {
+  if (!placeholder) return;
+  if (!placeholder.classList.contains('placeholder-click-through')) return;
+  placeholder.style.display = 'none';
 }
 
 function showFirstEpisodeHintForHost() {
@@ -592,6 +600,7 @@ function applyPlaybackState(playback) {
       sendPauseToIframe();
     } else {
       if (isHost || roomId === 'solo' || userInteractedWithPlayer) {
+        hideViewerHintOverlay();
         sendPlayToIframe();
       } else {
         showViewerHint();
@@ -705,7 +714,6 @@ function loadIframe(embedUrl) {
   iframe.addEventListener('load', () => {
     ensureBridgeWindow();
 
-    // После загрузки новой серии всегда сначала фиксируем паузу.
     setTimeout(() => {
       sendPauseToIframe();
     }, 500);
@@ -729,7 +737,7 @@ function loadIframe(embedUrl) {
     if (!isHost && roomId !== 'solo') {
       setTimeout(() => {
         if (!userInteractedWithPlayer) {
-          showViewerHint('Если серия не стартовала, кликните по плееру один раз и дождитесь команды play от хоста.');
+          showViewerHint('Если серия не стартовала, нажмите прямо по плееру один раз. Подсказка не мешает клику.');
         }
       }, 1800);
     }
@@ -1241,10 +1249,12 @@ function saveNickname() {
 
 window.addEventListener('pointerdown', () => {
   userInteractedWithPlayer = true;
+  hideViewerHintOverlay();
 });
 
 window.addEventListener('keydown', () => {
   userInteractedWithPlayer = true;
+  hideViewerHintOverlay();
 });
 
 document.addEventListener('click', (event) => {

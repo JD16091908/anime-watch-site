@@ -345,6 +345,7 @@
   border-radius: 18px;
   background: #000;
   display: block;
+  z-index: 1;
 }
 
 .player-wrapper-overlay {
@@ -514,7 +515,7 @@
   justify-content: center;
   text-align: center;
   padding: 24px;
-  z-index: 1;
+  z-index: 2;
 }
 
 .placeholder h2 {
@@ -527,6 +528,39 @@
   margin: 0;
   color: #b7c2dc;
   font-size: 16px;
+}
+
+.placeholder.placeholder-click-through {
+  background: linear-gradient(
+    180deg,
+    rgba(5, 7, 13, 0.10) 0%,
+    rgba(5, 7, 13, 0.02) 35%,
+    rgba(5, 7, 13, 0.22) 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+  align-items: flex-end;
+  padding: 18px;
+}
+
+.placeholder.placeholder-click-through > div {
+  max-width: min(92%, 560px);
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(8, 12, 20, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.placeholder.placeholder-click-through h2 {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.placeholder.placeholder-click-through p {
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .block {
@@ -975,6 +1009,23 @@
 
   .search-result-meta {
     font-size: 12px;
+  }
+
+  .placeholder.placeholder-click-through {
+    padding: 10px;
+  }
+
+  .placeholder.placeholder-click-through > div {
+    max-width: 96%;
+    padding: 12px 14px;
+  }
+
+  .placeholder.placeholder-click-through h2 {
+    font-size: 16px;
+  }
+
+  .placeholder.placeholder-click-through p {
+    font-size: 13px;
   }
 }
 
