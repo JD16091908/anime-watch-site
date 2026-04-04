@@ -247,22 +247,51 @@ function playChatSound() {
     }
 
     const now = ctx.currentTime;
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
 
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(880, now);
-    oscillator.frequency.exponentialRampToValueAtTime(660, now + 0.08);
+    const oscMain = ctx.createOscillator();
+    const oscLayer = ctx.createOscillator();
+    const gainMain = ctx.createGain();
+    const gainLayer = ctx.createGain();
+    const masterGain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
 
-    gainNode.gain.setValueAtTime(0.0001, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    oscMain.type = 'triangle';
+    oscLayer.type = 'sine';
 
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    oscMain.frequency.setValueAtTime(740, now);
+    oscMain.frequency.exponentialRampToValueAtTime(620, now + 0.09);
 
-    oscillator.start(now);
-    oscillator.stop(now + 0.15);
+    oscLayer.frequency.setValueAtTime(1110, now);
+    oscLayer.frequency.exponentialRampToValueAtTime(880, now + 0.09);
+
+    gainMain.gain.setValueAtTime(0.0001, now);
+    gainMain.gain.exponentialRampToValueAtTime(0.028, now + 0.008);
+    gainMain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+    gainLayer.gain.setValueAtTime(0.0001, now);
+    gainLayer.gain.exponentialRampToValueAtTime(0.012, now + 0.008);
+    gainLayer.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2200, now);
+    filter.Q.setValueAtTime(0.8, now);
+
+    masterGain.gain.setValueAtTime(0.9, now);
+
+    oscMain.connect(gainMain);
+    oscLayer.connect(gainLayer);
+
+    gainMain.connect(filter);
+    gainLayer.connect(filter);
+
+    filter.connect(masterGain);
+    masterGain.connect(ctx.destination);
+
+    oscMain.start(now);
+    oscLayer.start(now);
+
+    oscMain.stop(now + 0.15);
+    oscLayer.stop(now + 0.15);
   } catch (error) {
     console.warn('Не удалось воспроизвести звук чата:', error);
   }
