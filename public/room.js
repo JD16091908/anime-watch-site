@@ -141,6 +141,7 @@ let isOverlaySeasonOpen = false;
 let isOverlayEpisodeOpen = false;
 
 let lastSentSeekAt = 0;
+let audioContext = null;
 
 let currentState = {
   animeId: null,
@@ -215,6 +216,52 @@ if (roomSupportBoostyLink) {
 }
 if (roomSupportDonationAlertsLink) {
   roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
+}
+
+function ensureAudioContext() {
+  if (audioContext) return audioContext;
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+
+  audioContext = new AudioCtx();
+  return audioContext;
+}
+
+function unlockAudioContext() {
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+}
+
+function playChatSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
+
+  const now = ctx.currentTime;
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(880, now);
+  oscillator.frequency.exponentialRampToValueAtTime(660, now + 0.08);
+
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(ctx.destination);
+
+  oscillator.start(now);
+  oscillator.stop(now + 0.15);
 }
 
 function openRoomSupportModal() {
@@ -1382,11 +1429,13 @@ function saveNickname() {
 window.addEventListener('pointerdown', () => {
   userInteractedWithPlayer = true;
   hideViewerHintOverlay();
+  unlockAudioContext();
 });
 
 window.addEventListener('keydown', () => {
   userInteractedWithPlayer = true;
   hideViewerHintOverlay();
+  unlockAudioContext();
 });
 
 document.addEventListener('click', (event) => {
@@ -1628,12 +1677,19 @@ socket.on('system-message', ({ text }) => sys(text));
 
 socket.on('chat-message', ({ username: author, message, time }) => {
   if (!chatMessages || !window.ChatModule) return;
+
+  const isSelfMessage = author === username;
+
   ChatModule.appendMessage(chatMessages, {
     username: author,
     message,
     time,
-    isSelf: author === username
+    isSelf: isSelfMessage
   });
+
+  if (!isSelfMessage) {
+    playChatSound();
+  }
 });
 
 if (searchInput) {
@@ -1696,6 +1752,8 @@ if (sendBtn && chatInput) {
   sendBtn.addEventListener('click', () => {
     const message = chatInput.value.trim();
     if (!message) return;
+
+    unlockAudioContext();
 
     if (roomId !== 'solo') {
       socket.emit('chat-message', { roomId, username, message });

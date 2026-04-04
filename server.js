@@ -45,28 +45,42 @@ function normalizeSearchText(value) {
 function loadBlockedAnimeConfig() {
   try {
     if (!fs.existsSync(BLOCKED_ANIME_FILE)) {
-      return { ru: { titles: [], shikimoriIds: [] } };
+      return {};
     }
 
     const raw = fs.readFileSync(BLOCKED_ANIME_FILE, 'utf8');
     const parsed = JSON.parse(raw);
 
-    return {
-      ru: {
-        titles: Array.isArray(parsed?.ru?.titles) ? parsed.ru.titles : [],
-        shikimoriIds: Array.isArray(parsed?.ru?.shikimoriIds) ? parsed.ru.shikimoriIds.map(Number) : []
-      }
-    };
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+
+    const normalized = {};
+
+    for (const [countryCode, value] of Object.entries(parsed)) {
+      normalized[String(countryCode).toLowerCase()] = {
+        titles: Array.isArray(value?.titles) ? value.titles : [],
+        shikimoriIds: Array.isArray(value?.shikimoriIds)
+          ? value.shikimoriIds.map(Number).filter(id => Number.isFinite(id))
+          : []
+      };
+    }
+
+    return normalized;
   } catch (error) {
     console.error('BLOCKED ANIME LOAD ERROR:', error.message);
-    return { ru: { titles: [], shikimoriIds: [] } };
+    return {};
   }
 }
 
 function getBlockedAnimeConfigForCountry(countryCode) {
   const config = loadBlockedAnimeConfig();
   const key = String(countryCode || '').toLowerCase();
-  return config[key] || { titles: [], shikimoriIds: [] };
+
+  return config[key] || {
+    titles: [],
+    shikimoriIds: []
+  };
 }
 
 function getClientIp(req) {
@@ -109,8 +123,7 @@ function getCountryByIp(req) {
 
 function isBlockedForCountry(countryCode, checkData) {
   const config = getBlockedAnimeConfigForCountry(countryCode);
-  
-  // Проверка по shikimoriId (приоритетная)
+
   if (checkData.shikimoriId) {
     const id = Number(checkData.shikimoriId);
     if (config.shikimoriIds.includes(id)) {
@@ -118,13 +131,13 @@ function isBlockedForCountry(countryCode, checkData) {
     }
   }
 
-  // Проверка по названию
   if (checkData.title) {
     const normalizedTitle = normalizeSearchText(checkData.title);
     if (normalizedTitle) {
-      const blockedByTitle = config.titles.some(item => 
+      const blockedByTitle = config.titles.some(item =>
         normalizeSearchText(item) === normalizedTitle
       );
+
       if (blockedByTitle) return true;
     }
   }
@@ -134,38 +147,49 @@ function isBlockedForCountry(countryCode, checkData) {
 
 function isAnimeBlockedForRequest(req, selected = {}, foundItem = null) {
   const geo = getCountryByIp(req);
-  
-  // Собираем все возможные ID для проверки
+
   const shikimoriIds = [
     selected?.shikimoriId,
     foundItem?.shikimori_id,
     foundItem?.material_data?.shikimori_id
   ].filter(Boolean).map(Number);
 
-  // Собираем все возможные названия для проверки
   const titles = [
     selected?.title,
     foundItem ? normalizeTitle(foundItem) : '',
     foundItem?.material_data?.title,
     foundItem?.material_data?.ru_title,
-    foundItem?.material_data?.anime_title
+    foundItem?.material_data?.anime_title,
+    foundItem?.material_data?.full_title
   ].filter(Boolean);
 
-  // Проверяем по ID (хватит одного совпадения)
   for (const id of shikimoriIds) {
     if (isBlockedForCountry(geo.country, { shikimoriId: id })) {
-      return { blocked: true, country: geo.country, ip: geo.ip, reason: 'id' };
+      return {
+        blocked: true,
+        country: geo.country,
+        ip: geo.ip,
+        reason: 'id'
+      };
     }
   }
 
-  // Проверяем по названию
   for (const title of titles) {
     if (isBlockedForCountry(geo.country, { title })) {
-      return { blocked: true, country: geo.country, ip: geo.ip, reason: 'title' };
+      return {
+        blocked: true,
+        country: geo.country,
+        ip: geo.ip,
+        reason: 'title'
+      };
     }
   }
 
-  return { blocked: false, country: geo.country, ip: geo.ip };
+  return {
+    blocked: false,
+    country: geo.country,
+    ip: geo.ip
+  };
 }
 
 async function checkHostAvailable(hostname) {
@@ -668,7 +692,7 @@ async function fetchAnimeBySelection(selected) {
 
     let results = [
       ...(Array.isArray(searchData?.results) ? searchData.results : []),
-      ...(Array isArray(listData?.results) ? listData.results : [])
+      ...(Array.isArray(listData?.results) ? listData.results : [])
     ];
 
     return await fetchFullEpisodesForLongAnime(results);
@@ -922,11 +946,12 @@ app.get('/api/geo', (req, res) => {
 app.get('/api/blocked-anime', (req, res) => {
   const geo = getCountryByIp(req);
   const config = getBlockedAnimeConfigForCountry(geo.country);
-  
+
   res.json({
     country: geo.country,
     titles: config.titles.length,
     shikimoriIds: config.shikimoriIds.length,
+    titlesList: config.titles,
     shikimoriIdsList: config.shikimoriIds
   });
 });
