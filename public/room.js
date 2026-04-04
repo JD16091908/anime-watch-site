@@ -238,30 +238,34 @@ function unlockAudioContext() {
 }
 
 function playChatSound() {
-  const ctx = ensureAudioContext();
-  if (!ctx) return;
+  try {
+    const ctx = ensureAudioContext();
+    if (!ctx) return;
 
-  if (ctx.state === 'suspended') {
-    ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, now);
+    oscillator.frequency.exponentialRampToValueAtTime(660, now + 0.08);
+
+    gainNode.gain.setValueAtTime(0.0001, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    oscillator.start(now);
+    oscillator.stop(now + 0.15);
+  } catch (error) {
+    console.warn('Не удалось воспроизвести звук чата:', error);
   }
-
-  const now = ctx.currentTime;
-  const oscillator = ctx.createOscillator();
-  const gainNode = ctx.createGain();
-
-  oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(880, now);
-  oscillator.frequency.exponentialRampToValueAtTime(660, now + 0.08);
-
-  gainNode.gain.setValueAtTime(0.0001, now);
-  gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(ctx.destination);
-
-  oscillator.start(now);
-  oscillator.stop(now + 0.15);
 }
 
 function openRoomSupportModal() {
@@ -1754,6 +1758,7 @@ if (sendBtn && chatInput) {
     if (!message) return;
 
     unlockAudioContext();
+    playChatSound();
 
     if (roomId !== 'solo') {
       socket.emit('chat-message', { roomId, username, message });
