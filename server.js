@@ -1255,7 +1255,7 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
     socket.to(roomId).emit('system-message', {
-      text: `${socket.data.username} joined the room`
+      text: `${socket.data.username} вошёл в комнату`
     });
   });
 
@@ -1275,7 +1275,7 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
     io.to(roomId).emit('system-message', {
-      text: `${oldUsername} is now ${newUsername}`
+      text: `${oldUsername} теперь ${newUsername}`
     });
   });
 
@@ -1303,7 +1303,7 @@ io.on('connection', (socket) => {
     const state = getCurrentRoomState(roomId);
     io.to(roomId).emit('video-changed', state);
     io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
-    io.to(roomId).emit('system-message', { text: `Host selected: ${title}` });
+    io.to(roomId).emit('system-message', { text: `Хост выбрал: ${title}` });
   });
 
   socket.on('player-control', ({ roomId, action, currentTime }) => {
@@ -1405,7 +1405,7 @@ io.on('connection', (socket) => {
 
     if (room.users.length > 0) {
       io.to(roomId).emit('system-message', {
-        text: `${username} left the room`
+        text: `${username} вышел из комнаты`
       });
       io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
       io.to(roomId).emit('sync-state', {
