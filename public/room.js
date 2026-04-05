@@ -7,6 +7,7 @@ const DONATIONALERTS_URL = SUPPORT_CONFIG.donationAlertsUrl || '#';
 
 const params = new URLSearchParams(window.location.search);
 const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] || '');
+const roomAccessToken = String(params.get('access') || '').trim();
 
 function updateRoomDocumentMeta(currentRoomId) {
   const title = currentRoomId === 'solo'
@@ -1592,11 +1593,16 @@ window.addEventListener('message', (event) => {
 
 socket.on('connect', () => {
   if (roomId !== 'solo') {
-    socket.emit('join-room', { roomId, username, userKey });
+    socket.emit('join-room', { roomId, username, userKey, accessToken: roomAccessToken });
   } else {
     isHost = true;
     updateControlState();
   }
+});
+
+socket.on('join-error', ({ message }) => {
+  alert(message || 'Не удалось войти в комнату');
+  window.location.href = '/';
 });
 
 socket.on('disconnect', () => {
@@ -1739,7 +1745,13 @@ if (searchInput) {
 
 if (copyLinkBtn) {
   copyLinkBtn.addEventListener('click', async () => {
-    const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
+    const inviteParams = new URLSearchParams();
+    if (roomAccessToken) {
+      inviteParams.set('access', roomAccessToken);
+    }
+
+    const inviteQuery = inviteParams.toString();
+    const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}${inviteQuery ? `?${inviteQuery}` : ''}`;
 
     try {
       await navigator.clipboard.writeText(inviteUrl);
