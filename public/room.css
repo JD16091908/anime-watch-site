@@ -14,6 +14,9 @@
   min-height: 100vh;
   background: #0b1020;
   color: #fff;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .top-bar {
@@ -45,6 +48,7 @@
 #roomTitle {
   font-size: 20px;
   font-weight: 800;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -72,6 +76,7 @@
   color: #1b1300;
   font-weight: 800;
   font-size: 14px;
+  line-height: 1;
 }
 
 .room-layout-centered {
@@ -117,7 +122,10 @@
 .selected-anime-panel h2 {
   margin: 0 0 8px;
   font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
   color: #fff;
+  letter-spacing: -0.01em;
 }
 
 .muted-text,
@@ -125,11 +133,25 @@
 .center-search-hint {
   color: var(--room-muted);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0;
+  display: block;
+  margin: 0;
+  vertical-align: baseline;
+  text-rendering: geometricPrecision;
+}
+
+#hostSearchHint {
+  display: block;
+  margin: 0;
+  padding: 0;
+  line-height: 1.5;
+  min-height: 20px;
 }
 
 .users-caption {
-  margin: -4px 0 10px;
+  margin: -2px 0 10px;
 }
 
 .center-search-box {
@@ -147,6 +169,8 @@
   background: var(--room-panel-dark-2);
   color: #fff;
   font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .center-search-input:focus {
@@ -171,6 +195,7 @@
 .center-search-status {
   margin-top: 10px;
   font-size: 14px;
+  line-height: 1.45;
 }
 
 .search-dropdown {
@@ -238,15 +263,16 @@
   font-size: 16px;
   font-weight: 700;
   color: #f7f7f7;
-  line-height: 1.25;
+  line-height: 1.3;
   margin-bottom: 4px;
   word-break: break-word;
+  letter-spacing: -0.01em;
 }
 
 .search-result-meta {
   font-size: 13px;
   color: #b8b8b8;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .search-results-toggle {
@@ -259,6 +285,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.3;
   transition: 0.2s ease;
 }
 
@@ -269,7 +296,7 @@
 .selected-anime-info {
   color: #dbe7ff;
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .selected-anime-layout {
@@ -291,8 +318,10 @@
 .selected-anime-title {
   margin: 0 0 10px;
   font-size: 26px;
+  font-weight: 800;
   line-height: 1.2;
   color: #fff;
+  letter-spacing: -0.02em;
 }
 
 .selected-anime-meta {
@@ -300,12 +329,14 @@
   color: #ff8b92;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
 .selected-anime-description {
   margin: 0;
-  line-height: 1.65;
+  line-height: 1.7;
   font-size: 15px;
+  font-weight: 400;
   color: #d7d7d7;
 }
 
@@ -314,6 +345,7 @@
   color: #9db4ff;
   font-size: 14px;
   font-weight: 700;
+  line-height: 1.35;
 }
 
 .player-shell {
@@ -469,6 +501,7 @@
   transition: 0.15s ease;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .overlay-dropdown-item:hover {
@@ -522,12 +555,15 @@
   margin: 0 0 10px;
   color: #9dc1f7;
   font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .placeholder p {
   margin: 0;
   color: #b7c2dc;
   font-size: 16px;
+  line-height: 1.5;
 }
 
 .placeholder.placeholder-click-through {
@@ -571,7 +607,10 @@
 .block h2 {
   margin: 0 0 12px;
   font-size: 16px;
+  font-weight: 800;
+  line-height: 1.25;
   color: #fff;
+  letter-spacing: -0.01em;
 }
 
 .empty-state {
@@ -580,6 +619,7 @@
   background: rgba(255, 255, 255, 0.04);
   color: #aebad6;
   font-size: 14px;
+  line-height: 1.45;
   text-align: center;
 }
 
@@ -597,6 +637,7 @@
   color: #dbe7ff;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.3;
 }
 
 .nickname-row {
@@ -615,6 +656,8 @@
   background: var(--room-input);
   color: #fff;
   width: 100%;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .nickname-input::placeholder {
@@ -657,6 +700,7 @@
 
 .user-name {
   font-weight: 700;
+  line-height: 1.35;
   word-break: break-word;
 }
 
@@ -667,6 +711,7 @@
   color: #1b1300;
   font-size: 12px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .user-time {
@@ -679,6 +724,7 @@
   color: #dbe7ff;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
@@ -707,7 +753,7 @@
 .system-message {
   padding: 12px 14px;
   border-radius: 14px;
-  line-height: 1.4;
+  line-height: 1.45;
   word-break: break-word;
 }
 
@@ -733,6 +779,7 @@
   gap: 10px;
   margin-bottom: 6px;
   font-size: 13px;
+  line-height: 1.3;
 }
 
 .chat-time {
@@ -744,7 +791,8 @@
 
 .chat-message-body {
   color: #fff;
-  line-height: 1.45;
+  line-height: 1.55;
+  font-size: 14px;
 }
 
 .chat-input-box {
@@ -762,6 +810,8 @@
   border-radius: 12px;
   background: var(--room-input);
   color: #fff;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .chat-input-box input::placeholder {
