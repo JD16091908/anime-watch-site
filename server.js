@@ -1576,7 +1576,7 @@ io.on('connection', (socket) => {
 
     if (action === 'seek') {
       const now = Date.now();
-      if (now - socket.data.lastSeekEmitAt < 400) return;
+      if (now - socket.data.lastSeekEmitAt < 250) return;
       socket.data.lastSeekEmitAt = now;
     }
 
@@ -1616,7 +1616,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     const now = Date.now();
-    if (now - socket.data.lastUserTimeEmitAt < 3500) return;
+    if (now - socket.data.lastUserTimeEmitAt < 1000) return;
     socket.data.lastUserTimeEmitAt = now;
 
     const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) && currentTime >= 0

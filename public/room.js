@@ -143,6 +143,8 @@ let isOverlayEpisodeOpen = false;
 
 let lastSentSeekAt = 0;
 let audioContext = null;
+let latestRoomUsers = [];
+let usersRenderTicker = null;
 
 let currentState = {
   animeId: null,
@@ -677,6 +679,19 @@ function requestKodikTime() {
   }
 }
 
+function shouldForceResync(targetTime) {
+  const currentLocalTime = Number(currentState.playback.currentTime);
+  if (Number.isNaN(currentLocalTime)) return true;
+  return Math.abs(currentLocalTime - targetTime) > 1.5;
+}
+
+function shouldSoftSync(targetTime) {
+  const currentLocalTime = Number(currentState.playback.currentTime);
+  if (Number.isNaN(currentLocalTime)) return false;
+  const diff = Math.abs(currentLocalTime - targetTime);
+  return diff > 0.45 && diff <= 1.5;
+}
+
 function applyPlaybackState(playback) {
   if (!playback) return;
 
@@ -700,8 +715,12 @@ function applyPlaybackState(playback) {
 
   isRemoteAction = true;
 
-  if (targetTime !== null && targetTime > 0.2) {
-    sendSeekToIframe(targetTime);
+  if (targetTime !== null) {
+    if (shouldForceResync(targetTime)) {
+      sendSeekToIframe(targetTime);
+    } else if (shouldSoftSync(targetTime)) {
+      sendSeekToIframe(targetTime);
+    }
   }
 
   setTimeout(() => {
@@ -715,11 +734,11 @@ function applyPlaybackState(playback) {
         showViewerHint();
       }
     }
-  }, 220);
+  }, 180);
 
   setTimeout(() => {
     isRemoteAction = false;
-  }, 1200);
+  }, 900);
 }
 
 function applyPlaybackStateWhenReady(playback, attempts = 12) {
@@ -737,7 +756,7 @@ function applyPlaybackStateWhenReady(playback, attempts = 12) {
       return;
     }
     attempts -= 1;
-    setTimeout(tryApply, 700);
+    setTimeout(tryApply, 500);
   };
 
   tryApply();
@@ -799,7 +818,7 @@ function startHostPlaybackGuard() {
       lastKnownHostTime = currentTime;
       lastKnownHostTimeAt = now;
     }
-  }, 2500);
+  }, 1500);
 }
 
 function loadIframe(embedUrl) {
@@ -825,7 +844,7 @@ function loadIframe(embedUrl) {
 
     setTimeout(() => {
       sendPauseToIframe();
-    }, 500);
+    }, 400);
 
     if (bridge.playerType === 'kodik') {
       startUserTimeTimer();
@@ -840,7 +859,7 @@ function loadIframe(embedUrl) {
     if (pendingPlaybackApply) {
       const pb = pendingPlaybackApply;
       pendingPlaybackApply = null;
-      setTimeout(() => applyPlaybackStateWhenReady(pb, 12), 1200);
+      setTimeout(() => applyPlaybackStateWhenReady(pb, 12), 800);
     }
 
     if (!isHost && roomId !== 'solo') {
@@ -848,7 +867,7 @@ function loadIframe(embedUrl) {
         if (!userInteractedWithPlayer) {
           showViewerHint('Если серия не стартовала, нажмите прямо по плееру один раз. Подсказка не мешает клику.');
         }
-      }, 1800);
+      }, 1200);
     }
   });
 }
@@ -859,7 +878,7 @@ function startHostTimers() {
   kodikTimeRequestTimer = setInterval(() => {
     if (!isHost || !currentState.embedUrl) return;
     requestKodikTime();
-  }, 2500);
+  }, 1000);
 
   hostTimeBroadcastTimer = setInterval(() => {
     if (!isHost || roomId === 'solo') return;
@@ -872,7 +891,7 @@ function startHostTimers() {
         currentTime: ct
       });
     }
-  }, 3500);
+  }, 1000);
 }
 
 function stopHostTimers() {
@@ -904,7 +923,7 @@ function startUserTimeTimer() {
         currentTime: ct
       });
     }
-  }, 4000);
+  }, 1000);
 }
 
 function stopUserTimeTimer() {
@@ -914,17 +933,34 @@ function stopUserTimeTimer() {
   }
 }
 
+function getDisplayedUserTime(user) {
+  const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
+  if (!hasTime) return null;
+
+  const baseTime = Number(user.currentTime) || 0;
+  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
+
+  if (!updatedAt) return baseTime;
+
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+  return baseTime + diffSeconds;
+}
+
 function renderUsers(users) {
   if (!usersList) return;
 
-  if (!Array.isArray(users) || users.length === 0) {
+  if (Array.isArray(users)) {
+    latestRoomUsers = users.map(user => ({ ...user }));
+  }
+
+  if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
     usersList.innerHTML = `<div class="empty-state">Пока никого нет</div>`;
     return;
   }
 
-  usersList.innerHTML = users.map(user => {
-    const hasTime = typeof user.currentTime === 'number' && !Number.isNaN(user.currentTime);
-    const timeText = hasTime ? formatWatchTime(user.currentTime) : '—:—';
+  usersList.innerHTML = latestRoomUsers.map(user => {
+    const displayTime = getDisplayedUserTime(user);
+    const timeText = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '—:—';
 
     return `
       <div class="user-item">
@@ -938,6 +974,16 @@ function renderUsers(users) {
       </div>
     `;
   }).join('');
+}
+
+function startUsersRenderTicker() {
+  if (usersRenderTicker) {
+    clearInterval(usersRenderTicker);
+  }
+
+  usersRenderTicker = setInterval(() => {
+    renderUsers();
+  }, 1000);
 }
 
 async function loadWatchOrder(shikimoriId) {
@@ -1566,7 +1612,7 @@ window.addEventListener('message', (event) => {
         const seekTime = Number(value?.time);
         if (!Number.isNaN(seekTime) && seekTime >= 0) {
           const now = Date.now();
-          if (now - lastSentSeekAt < 500) return;
+          if (now - lastSentSeekAt < 350) return;
           lastSentSeekAt = now;
 
           currentState.playback.currentTime = seekTime;
@@ -1584,7 +1630,7 @@ window.addEventListener('message', (event) => {
     if (pendingPlaybackApply) {
       const state = pendingPlaybackApply;
       pendingPlaybackApply = null;
-      setTimeout(() => applyPlaybackState(state), 300);
+      setTimeout(() => applyPlaybackState(state), 250);
     }
   } catch (error) {
     console.error(error);
@@ -1823,8 +1869,14 @@ window.addEventListener('beforeunload', () => {
   stopHostTimers();
   stopUserTimeTimer();
   stopHostPlaybackGuard();
+
+  if (usersRenderTicker) {
+    clearInterval(usersRenderTicker);
+    usersRenderTicker = null;
+  }
 });
 
 updateControlState();
 showPlaceholder('Ничего не выбрано', 'Выберите аниме');
 renderUsers([]);
+startUsersRenderTicker();
