@@ -1090,6 +1090,7 @@
 .overlay-dropdown-menu-episodes::-webkit-scrollbar-corner {
   background: #111a2d;
 }
+
 .watch-order-block {
   margin-top: 18px;
   padding-top: 2px;
@@ -1137,6 +1138,61 @@
   display: block;
 }
 
+.watch-order-section {
+  padding: 0;
+}
+
+.watch-order-section + .watch-order-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.watch-order-section-title {
+  padding: 12px 14px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9db4ff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.watch-order-section-extra {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.watch-order-subtoggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: none;
+  background: rgba(255, 255, 255, 0.035);
+  color: #d7e3ff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+  transition: 0.18s ease;
+}
+
+.watch-order-subtoggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.watch-order-subtoggle.expanded {
+  background: rgba(123, 140, 255, 0.10);
+}
+
+.watch-order-extra-list.collapsed {
+  display: none;
+}
+
+.watch-order-extra-list.expanded {
+  display: block;
+}
+
 .watch-order-item {
   width: 100%;
   padding: 12px 14px;
@@ -1159,6 +1215,7 @@
 
 .watch-order-item.current {
   background: rgba(123, 140, 255, 0.12);
+  box-shadow: inset 3px 0 0 rgba(123, 140, 255, 0.9);
 }
 
 .watch-order-item-main {
@@ -1191,6 +1248,16 @@
   .watch-order-toggle {
     width: 100%;
     justify-content: center;
+  }
+
+  .watch-order-subtoggle {
+    padding: 11px 12px;
+    font-size: 13px;
+  }
+
+  .watch-order-section-title {
+    padding: 11px 12px 9px;
+    font-size: 12px;
   }
 
   .watch-order-item {

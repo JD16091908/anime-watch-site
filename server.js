@@ -740,6 +740,116 @@ function strictMatchResults(items, selected) {
   return filtered;
 }
 
+async function fetchFullEpisodesForLongAnime(results) {
+  const first = results[0];
+  if (!first) return results;
+
+  const currentEpisodesCount = mergeEpisodes(results).length;
+  const maxKnownEpisode = getLastEpisode(first);
+
+  if (currentEpisodesCount >= 10 || maxKnownEpisode < 20) {
+    return results;
+  }
+
+  console.log(`[Long Anime Detected] ${normalizeTitle(first)} | episodes found: ${currentEpisodesCount}, last known: ${maxKnownEpisode}`);
+  console.log('Запрашиваю полный список серий по material_id');
+
+  const materialId = getMaterialId(first);
+  if (!materialId) return results;
+
+  try {
+    const fullData = await kodikGet('/list', {
+      material_id: materialId,
+      with_material_data: 'true',
+      with_episodes: 'true',
+      types: 'anime-serial,anime'
+    });
+
+    const fullResults = Array.isArray(fullData?.results) ? fullData.results : [];
+    return [...results, ...fullResults];
+  } catch (error) {
+    console.log('Не удалось получить полный список серий:', error.message);
+    return results;
+  }
+}
+
+async function fetchAnimeBySelection(selected) {
+  if (selected?.shikimoriId) {
+    const [searchData, listData] = await Promise.all([
+      kodikGet('/search', {
+        shikimori_id: selected.shikimoriId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: 'anime-serial,anime'
+      }),
+      kodikGet('/list', {
+        shikimori_id: selected.shikimoriId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: 'anime-serial,anime'
+      })
+    ]);
+
+    let results = [
+      ...(Array.isArray(searchData?.results) ? searchData.results : []),
+      ...(Array.isArray(listData?.results) ? listData.results : [])
+    ];
+
+    return await fetchFullEpisodesForLongAnime(results);
+  }
+
+  if (selected?.kodikId) {
+    const [searchData, listData] = await Promise.all([
+      kodikGet('/search', {
+        id: selected.kodikId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: 'anime-serial,anime'
+      }),
+      kodikGet('/list', {
+        id: selected.kodikId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: 'anime-serial,anime'
+      })
+    ]);
+
+    let results = [
+      ...(Array.isArray(searchData?.results) ? searchData.results : []),
+      ...(Array.isArray(listData?.results) ? listData.results : [])
+    ];
+
+    return await fetchFullEpisodesForLongAnime(results);
+  }
+
+  if (selected?.title) {
+    const [searchData, listData] = await Promise.all([
+      kodikGet('/search', {
+        title: selected.title,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: 'anime-serial,anime'
+      }),
+      kodikGet('/list', {
+        title: selected.title,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        year: selected.year || undefined,
+        types: 'anime-serial,anime'
+      })
+    ]);
+
+    let results = [
+      ...(Array.isArray(searchData?.results) ? searchData.results : []),
+      ...(Array.isArray(listData?.results) ? listData.results : [])
+    ];
+
+    return await fetchFullEpisodesForLongAnime(results);
+  }
+
+  return [];
+}
+
 function normalizeShikiType(kind) {
   const value = String(kind || '').toLowerCase();
 
@@ -780,7 +890,7 @@ function isRecapOrJunkRelation(relation, kind, title = '') {
   const t = String(title || '').toLowerCase();
 
   if (rel === 'summary' || rel === 'character') return true;
-  if (t.includes('recap') || t.includes('summary') || t.includes('омнибус')) return true;
+  if (t.includes('recap') || t.includes('summary') || t.includes('рекап')) return true;
   if (k === 'special' && rel === 'other') return true;
 
   return false;
@@ -815,38 +925,19 @@ async function getAnimeWithRelated(shikimoriId) {
   };
 }
 
-function isSideRelation(relation) {
-  const rel = String(relation || '').toLowerCase();
-  return [
-    'side_story',
-    'spin_off',
-    'alternative_version',
-    'alternative_setting',
-    'full_story',
-    'parent_story',
-    'other'
-  ].includes(rel);
-}
-
 function mainlinePriority(node) {
-  const rel = String(node?.relation || '').toLowerCase();
   const kind = String(node?.kind || '').toLowerCase();
   const year = Number(node?.year) || 9999;
 
   let score = 0;
 
-  if (rel === 'current') score += 10000;
-  if (rel === 'mainline') score += 8000;
-  if (rel === 'sequel') score += 7000;
-  if (rel === 'prequel') score += 7000;
+  if (kind === 'tv') score += 5000;
+  else if (kind === 'movie') score += 2500;
+  else if (kind === 'ova') score += 1500;
+  else if (kind === 'ona') score += 1200;
+  else if (kind === 'special') score += 500;
 
-  if (kind === 'tv') score += 3000;
-  else if (kind === 'movie') score += 1500;
-  else if (kind === 'ova') score += 900;
-  else if (kind === 'ona') score += 800;
-  else if (kind === 'special') score += 200;
-
-  score -= Math.min(year, 9999);
+  score -= year;
 
   return score;
 }
@@ -932,13 +1023,19 @@ async function buildWatchOrder(startShikimoriId) {
 
   const mainlineCandidates = filteredNodes.filter(node => {
     const rel = String(node.relation || '').toLowerCase();
-    return rel === 'current' || rel === 'mainline' || rel === 'sequel' || rel === 'prequel';
+    return rel === 'current' || rel === 'prequel' || rel === 'sequel';
   });
 
   const tvMainline = mainlineCandidates.filter(node => String(node.kind || '').toLowerCase() === 'tv');
-  const chosenMainlineBase = tvMainline.length ? tvMainline : mainlineCandidates;
 
-  const mainline = [...chosenMainlineBase]
+  let mainlineBase = tvMainline.length ? tvMainline : mainlineCandidates;
+
+  if (!mainlineBase.some(node => node.shikimoriId === startShikimoriId) && currentNode) {
+    mainlineBase = [...mainlineBase, currentNode];
+  }
+
+  const mainline = [...mainlineBase]
+    .filter((node, index, arr) => arr.findIndex(item => item.shikimoriId === node.shikimoriId) === index)
     .sort((a, b) => {
       const yearA = Number(a.year) || 9999;
       const yearB = Number(b.year) || 9999;
@@ -951,7 +1048,6 @@ async function buildWatchOrder(startShikimoriId) {
 
       return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
     })
-    .filter((node, index, arr) => arr.findIndex(item => item.shikimoriId === node.shikimoriId) === index)
     .map(node => ({
       ...node,
       relation: node.shikimoriId === startShikimoriId ? 'current' : 'mainline',
