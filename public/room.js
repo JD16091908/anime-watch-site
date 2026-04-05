@@ -145,6 +145,7 @@ let isOverlayEpisodeOpen = false;
 let lastSentSeekAt = 0;
 let lastAppliedTargetTime = null;
 let lastAppliedAt = 0;
+let lastForcedSyncAt = 0;
 let audioContext = null;
 let latestRoomUsers = [];
 let usersRenderTicker = null;
@@ -704,8 +705,8 @@ function shouldSkipRepeatedSeek(targetTime) {
   if (typeof targetTime !== 'number' || Number.isNaN(targetTime)) return false;
   if (lastAppliedTargetTime === null) return false;
   const timeDiff = Math.abs(lastAppliedTargetTime - targetTime);
-  const recentlyApplied = Date.now() - lastAppliedAt < 900;
-  return recentlyApplied && timeDiff < 0.35;
+  const recentlyApplied = Date.now() - lastAppliedAt < 1200;
+  return recentlyApplied && timeDiff < 0.45;
 }
 
 function applySeekIfNeeded(targetTime, force = false) {
@@ -716,13 +717,20 @@ function applySeekIfNeeded(targetTime, force = false) {
   const diff = safeCurrentLocal === null ? Infinity : Math.abs(safeCurrentLocal - targetTime);
 
   if (!force) {
-    if (diff <= 0.45) return false;
+    if (diff <= 0.7) return false;
     if (shouldSkipRepeatedSeek(targetTime)) return false;
+  } else {
+    if (Date.now() - lastForcedSyncAt < 1000) return false;
   }
 
   sendSeekToIframe(targetTime);
   lastAppliedTargetTime = targetTime;
   lastAppliedAt = Date.now();
+
+  if (force) {
+    lastForcedSyncAt = Date.now();
+  }
+
   return true;
 }
 
@@ -740,34 +748,40 @@ function applyPlaybackState(playback) {
 
   isRemoteAction = true;
 
-  if (targetTime !== null) {
-    const localTime = Number(currentState.playback.currentTime);
-    const safeLocalTime = Number.isNaN(localTime) ? null : localTime;
-    const diff = safeLocalTime === null ? Infinity : Math.abs(safeLocalTime - targetTime);
-
-    if (diff > 1.3) {
+  if (paused) {
+    if (targetTime !== null) {
       applySeekIfNeeded(targetTime, true);
-    } else if (diff > 0.45) {
-      applySeekIfNeeded(targetTime, false);
     }
-  }
 
-  setTimeout(() => {
-    if (paused) {
+    setTimeout(() => {
       sendPauseToIframe();
-    } else {
+    }, 80);
+  } else {
+    if (targetTime !== null) {
+      const localTime = Number(currentState.playback.currentTime);
+      const safeLocalTime = Number.isNaN(localTime) ? null : localTime;
+      const diff = safeLocalTime === null ? Infinity : Math.abs(safeLocalTime - targetTime);
+
+      if (diff > 1.6) {
+        applySeekIfNeeded(targetTime, true);
+      } else if (diff > 0.7) {
+        applySeekIfNeeded(targetTime, false);
+      }
+    }
+
+    setTimeout(() => {
       if (isHost || roomId === 'solo' || userInteractedWithPlayer) {
         hideViewerHintOverlay();
         sendPlayToIframe();
       } else {
         showViewerHint();
       }
-    }
-  }, 150);
+    }, 120);
+  }
 
   setTimeout(() => {
     isRemoteAction = false;
-  }, 800);
+  }, 700);
 }
 
 function applyPlaybackStateWhenReady(playback, attempts = 12) {
@@ -785,7 +799,7 @@ function applyPlaybackStateWhenReady(playback, attempts = 12) {
       return;
     }
     attempts -= 1;
-    setTimeout(tryApply, 400);
+    setTimeout(tryApply, 350);
   };
 
   tryApply();
@@ -808,7 +822,9 @@ function startPlaybackDriftCheck() {
     if (!currentState.embedUrl) return;
     if (bridge.playerType !== 'kodik') return;
     if (!bridge.iframeWindow) return;
+    if (isRemoteAction) return;
 
+    const paused = !!currentState.playback.paused;
     const targetTime = getPredictedTargetTime(currentState.playback);
     if (targetTime === null) return;
 
@@ -817,15 +833,22 @@ function startPlaybackDriftCheck() {
 
     const diff = Math.abs(localTime - targetTime);
 
-    if (diff > 1.5) {
+    if (paused) {
+      if (diff > 0.5) {
+        applySeekIfNeeded(targetTime, true);
+      }
+      return;
+    }
+
+    if (diff > 1.8) {
       applySeekIfNeeded(targetTime, true);
       return;
     }
 
-    if (diff > 0.6) {
+    if (diff > 0.9) {
       applySeekIfNeeded(targetTime, false);
     }
-  }, 1200);
+  }, 1000);
 }
 
 function stopHostPlaybackGuard() {
@@ -902,6 +925,7 @@ function loadIframe(embedUrl) {
   lastKnownHostTimeAt = 0;
   lastAppliedTargetTime = null;
   lastAppliedAt = 0;
+  lastForcedSyncAt = 0;
 
   const iframe = createFreshIframe(embedUrl);
   bridge.playerType = detectPlayerType(embedUrl);
@@ -913,7 +937,7 @@ function loadIframe(embedUrl) {
 
     setTimeout(() => {
       sendPauseToIframe();
-    }, 300);
+    }, 250);
 
     if (bridge.playerType === 'kodik') {
       startUserTimeTimer();
@@ -930,7 +954,7 @@ function loadIframe(embedUrl) {
     if (pendingPlaybackApply) {
       const pb = pendingPlaybackApply;
       pendingPlaybackApply = null;
-      setTimeout(() => applyPlaybackStateWhenReady(pb, 12), 600);
+      setTimeout(() => applyPlaybackStateWhenReady(pb, 12), 500);
     }
 
     if (!isHost && roomId !== 'solo') {
@@ -938,7 +962,7 @@ function loadIframe(embedUrl) {
         if (!userInteractedWithPlayer) {
           showViewerHint('Если серия не стартовала, нажмите прямо по плееру один раз. Подсказка не мешает клику.');
         }
-      }, 900);
+      }, 800);
     }
   });
 }
@@ -949,7 +973,7 @@ function startHostTimers() {
   kodikTimeRequestTimer = setInterval(() => {
     if (!isHost || !currentState.embedUrl) return;
     requestKodikTime();
-  }, 800);
+  }, 900);
 
   hostTimeBroadcastTimer = setInterval(() => {
     if (!isHost || roomId === 'solo') return;
@@ -962,7 +986,7 @@ function startHostTimers() {
         currentTime: ct
       });
     }
-  }, 800);
+  }, 900);
 }
 
 function stopHostTimers() {
@@ -1701,7 +1725,7 @@ window.addEventListener('message', (event) => {
     if (pendingPlaybackApply) {
       const state = pendingPlaybackApply;
       pendingPlaybackApply = null;
-      setTimeout(() => applyPlaybackState(state), 180);
+      setTimeout(() => applyPlaybackState(state), 150);
     }
   } catch (error) {
     console.error(error);
@@ -1751,12 +1775,8 @@ socket.on('sync-state', (state) => {
 
   if (!isHost) {
     stopHostPlaybackGuard();
-    if (currentState.embedUrl) {
-      startPlaybackDriftCheck();
-    }
   } else if (currentState.embedUrl) {
     startHostPlaybackGuard();
-    stopPlaybackDriftCheck();
   }
 
   currentState = {
