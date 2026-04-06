@@ -26,6 +26,16 @@ const ROOM_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 const roomCreationLog = new Map();
 
+const SEARCH_ALIASES_FILE = path.join(__dirname, 'search-aliases.json');
+
+const TRANSLIT_MAP = new Map([
+  ['а', 'a'], ['б', 'b'], ['в', 'v'], ['г', 'g'], ['д', 'd'], ['е', 'e'], ['ё', 'e'],
+  ['ж', 'zh'], ['з', 'z'], ['и', 'i'], ['й', 'y'], ['к', 'k'], ['л', 'l'], ['м', 'm'],
+  ['н', 'n'], ['о', 'o'], ['п', 'p'], ['р', 'r'], ['с', 's'], ['т', 't'], ['у', 'u'],
+  ['ф', 'f'], ['х', 'h'], ['ц', 'ts'], ['ч', 'ch'], ['ш', 'sh'], ['щ', 'sch'],
+  ['ъ', ''], ['ы', 'y'], ['ь', ''], ['э', 'e'], ['ю', 'yu'], ['я', 'ya']
+]);
+
 function isAllowedOrigin(origin) {
   if (!origin) return true;
   return ALLOWED_ORIGINS.has(origin);
@@ -168,6 +178,154 @@ function tokenizeSearchText(value) {
     .split(' ')
     .map(item => item.trim())
     .filter(Boolean);
+}
+
+function transliterateRuToLat(value) {
+  return normalizeSearchText(value)
+    .split('')
+    .map(ch => TRANSLIT_MAP.get(ch) ?? ch)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function transliterateLatToRuApprox(value) {
+  return normalizeSearchText(value)
+    .replace(/shch/g, 'щ')
+    .replace(/sch/g, 'щ')
+    .replace(/yo/g, 'е')
+    .replace(/yu/g, 'ю')
+    .replace(/ya/g, 'я')
+    .replace(/zh/g, 'ж')
+    .replace(/kh/g, 'х')
+    .replace(/ts/g, 'ц')
+    .replace(/ch/g, 'ч')
+    .replace(/sh/g, 'ш')
+    .replace(/ye/g, 'е')
+    .replace(/a/g, 'а')
+    .replace(/b/g, 'б')
+    .replace(/v/g, 'в')
+    .replace(/g/g, 'г')
+    .replace(/d/g, 'д')
+    .replace(/e/g, 'е')
+    .replace(/z/g, 'з')
+    .replace(/i/g, 'и')
+    .replace(/y/g, 'й')
+    .replace(/k/g, 'к')
+    .replace(/l/g, 'л')
+    .replace(/m/g, 'м')
+    .replace(/n/g, 'н')
+    .replace(/o/g, 'о')
+    .replace(/p/g, 'п')
+    .replace(/r/g, 'р')
+    .replace(/s/g, 'с')
+    .replace(/t/g, 'т')
+    .replace(/u/g, 'у')
+    .replace(/f/g, 'ф')
+    .replace(/h/g, 'х')
+    .replace(/w/g, 'в')
+    .replace(/x/g, 'кс')
+    .replace(/q/g, 'к')
+    .replace(/c/g, 'к')
+    .replace(/j/g, 'дж')
+    .trim();
+}
+
+function loadSearchAliases() {
+  try {
+    if (!fs.existsSync(SEARCH_ALIASES_FILE)) {
+      return new Map();
+    }
+
+    const raw = fs.readFileSync(SEARCH_ALIASES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    if (!parsed || typeof parsed !== 'object') {
+      return new Map();
+    }
+
+    const aliases = new Map();
+
+    for (const [key, values] of Object.entries(parsed)) {
+      const normalizedKey = normalizeSearchText(key);
+      if (!normalizedKey) continue;
+
+      const normalizedValues = Array.isArray(values)
+        ? values.map(item => normalizeSearchText(item)).filter(Boolean)
+        : [];
+
+      aliases.set(normalizedKey, normalizedValues);
+    }
+
+    return aliases;
+  } catch (error) {
+    console.error('SEARCH ALIASES LOAD ERROR:', error.message);
+    return new Map();
+  }
+}
+
+function expandQueryVariants(query) {
+  const normalized = normalizeSearchText(query);
+  const variants = new Set();
+  const aliases = loadSearchAliases();
+
+  if (!normalized) return [];
+
+  variants.add(normalized);
+
+  const translitRuToLat = transliterateRuToLat(normalized);
+  const translitLatToRu = transliterateLatToRuApprox(normalized);
+
+  if (translitRuToLat) variants.add(translitRuToLat);
+  if (translitLatToRu) variants.add(translitLatToRu);
+
+  const compact = normalized.replace(/\s+/g, '');
+  if (compact) variants.add(compact);
+
+  const aliasDirect = aliases.get(normalized);
+  if (aliasDirect) {
+    for (const alias of aliasDirect) {
+      variants.add(normalizeSearchText(alias));
+    }
+  }
+
+  for (const token of tokenizeSearchText(normalized)) {
+    const alias = aliases.get(token);
+    if (alias) {
+      for (const item of alias) {
+        variants.add(normalizeSearchText(item));
+      }
+    }
+  }
+
+  return [...variants].filter(Boolean);
+}
+
+function levenshteinDistance(a, b) {
+  const left = String(a || '');
+  const right = String(b || '');
+
+  if (left === right) return 0;
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+
+  const matrix = Array.from({ length: left.length + 1 }, () => new Array(right.length + 1).fill(0));
+
+  for (let i = 0; i <= left.length; i += 1) matrix[i][0] = i;
+  for (let j = 0; j <= right.length; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
 }
 
 function sanitizeRoomId(value) {
@@ -533,49 +691,82 @@ function isSerial(item) {
   return type.includes('serial');
 }
 
-function calcSingleTitleScore(normalizedTitle, query) {
-  const q = normalizeSearchText(query);
-  const title = normalizeSearchText(normalizedTitle);
-
-  if (!q || !title) return 0;
-
+function calcSingleTitleScore(normalizedTitle, queryVariants) {
   let score = 0;
+  const title = normalizeSearchText(normalizedTitle);
+  const titleLat = transliterateRuToLat(title);
 
-  if (title === q) score += 12000;
-  else if (title.startsWith(q)) score += 7000;
-  else if (title.includes(q)) score += 3200;
+  if (!title) return 0;
 
-  const qTokens = tokenizeSearchText(q);
-  const titleTokens = tokenizeSearchText(title);
+  const titleForms = new Set([title, titleLat].filter(Boolean));
 
-  for (const qToken of qTokens) {
-    if (!qToken) continue;
+  for (const query of queryVariants) {
+    const q = normalizeSearchText(query);
+    if (!q) continue;
 
-    if (titleTokens.includes(qToken)) {
-      score += qToken.length <= 3 ? 1600 : 2200;
-    }
+    const qLat = transliterateRuToLat(q);
+    const qRu = transliterateLatToRuApprox(q);
+    const queryForms = new Set([q, qLat, qRu].filter(Boolean));
 
-    for (const titleToken of titleTokens) {
-      if (!titleToken) continue;
+    for (const qForm of queryForms) {
+      for (const titleForm of titleForms) {
+        if (!qForm || !titleForm) continue;
 
-      if (titleToken === qToken) {
-        score += 2400;
-      } else if (titleToken.startsWith(qToken)) {
-        score += qToken.length <= 2 ? 1200 : 2200;
-      } else if (titleToken.includes(qToken)) {
-        score += qToken.length <= 2 ? 250 : 700;
-      }
+        if (titleForm === qForm) score = Math.max(score, 15000);
+        else if (titleForm.startsWith(qForm)) score = Math.max(score, 9000);
+        else if (titleForm.includes(qForm)) score = Math.max(score, 4500);
 
-      if (qToken.startsWith(titleToken) && titleToken.length >= 3) {
-        score += 350;
-      }
-    }
-  }
+        const qTokens = tokenizeSearchText(qForm);
+        const titleTokens = tokenizeSearchText(titleForm);
 
-  if (q.length <= 3) {
-    for (const titleToken of titleTokens) {
-      if (titleToken.startsWith(q)) {
-        score += 2600;
+        let tokenScore = 0;
+
+        for (const qToken of qTokens) {
+          if (!qToken) continue;
+
+          if (titleTokens.includes(qToken)) {
+            tokenScore += qToken.length <= 3 ? 1800 : 2600;
+          }
+
+          for (const titleToken of titleTokens) {
+            if (!titleToken) continue;
+
+            if (titleToken === qToken) {
+              tokenScore += 2600;
+            } else if (titleToken.startsWith(qToken)) {
+              tokenScore += qToken.length <= 2 ? 1500 : 2600;
+            } else if (titleToken.includes(qToken)) {
+              tokenScore += qToken.length <= 2 ? 400 : 900;
+            }
+
+            if (qToken.startsWith(titleToken) && titleToken.length >= 3) {
+              tokenScore += 450;
+            }
+
+            const lenDiff = Math.abs(titleToken.length - qToken.length);
+            if (qToken.length >= 4 && titleToken.length >= 4 && lenDiff <= 2) {
+              const dist = levenshteinDistance(qToken, titleToken);
+              if (dist === 1) tokenScore += 1900;
+              else if (dist === 2) tokenScore += 900;
+            }
+          }
+        }
+
+        if (qForm.length <= 3) {
+          for (const titleToken of titleTokens) {
+            if (titleToken.startsWith(qForm)) {
+              tokenScore += 3200;
+            }
+          }
+        }
+
+        if (qForm.length >= 4 && titleForm.length >= 4) {
+          const distWhole = levenshteinDistance(qForm, titleForm);
+          if (distWhole === 1) tokenScore += 2200;
+          else if (distWhole === 2) tokenScore += 1000;
+        }
+
+        score = Math.max(score, tokenScore);
       }
     }
   }
@@ -584,23 +775,25 @@ function calcSingleTitleScore(normalizedTitle, query) {
 }
 
 function titleScore(item, query) {
-  const q = normalizeSearchText(query);
-  if (!q) return 0;
   if (!isAllowedAnimeType(item)) return -1000;
+
+  const queryVariants = expandQueryVariants(query);
+  if (!queryVariants.length) return 0;
 
   const titles = getAllTitles(item);
   let score = 0;
 
   for (const title of titles) {
-    score = Math.max(score, calcSingleTitleScore(title, q));
+    score = Math.max(score, calcSingleTitleScore(title, queryVariants));
   }
 
-  const qYear = q.match(/\b(19|20)\d{2}\b/)?.[0];
+  const normalizedQuery = normalizeSearchText(query);
+  const qYear = normalizedQuery.match(/\b(19|20)\d{2}\b/)?.[0];
   const y = String(normalizeYear(item) || '');
   if (qYear && y === qYear) score += 1000;
 
   if (isSerial(item)) score += 500;
-  if (getShikimoriId(item)) score += 140;
+  if (getShikimoriId(item)) score += 150;
   if (normalizePoster(item)) score += 40;
   if (normalizeDescription(item)) score += 25;
 
@@ -629,7 +822,7 @@ function makeSearchItem(item, query) {
 }
 
 function dedupeSearchResults(items, query) {
-  const queryKey = normalizeTitleKey(query);
+  const queryVariants = expandQueryVariants(query).map(normalizeTitleKey).filter(Boolean);
   const strictMap = new Map();
 
   for (const item of items) {
@@ -642,25 +835,27 @@ function dedupeSearchResults(items, query) {
     const groupKey = `${itemKey}|${year}`;
 
     const goodMatch = titleCandidates.some(candidate =>
-      candidate === queryKey ||
-      candidate.startsWith(queryKey) ||
-      candidate.includes(queryKey) ||
-      queryKey.startsWith(candidate)
+      queryVariants.some(queryKey =>
+        candidate === queryKey ||
+        candidate.startsWith(queryKey) ||
+        candidate.includes(queryKey) ||
+        queryKey.startsWith(candidate)
+      )
     );
 
-    if (!goodMatch && queryKey.length >= 2) {
+    if (!goodMatch) {
       const rawCandidates = [item.title, ...(item.altTitles || [])]
         .map(value => normalizeSearchText(value))
         .filter(Boolean);
 
-      const softMatch = rawCandidates.some(candidate =>
-        candidate.includes(queryKey) ||
-        tokenizeSearchText(candidate).some(token => token.startsWith(queryKey))
+      const rawGoodMatch = rawCandidates.some(candidate =>
+        expandQueryVariants(query).some(q =>
+          candidate.includes(q) ||
+          tokenizeSearchText(candidate).some(token => token.startsWith(q))
+        )
       );
 
-      if (!softMatch) continue;
-    } else if (!goodMatch && queryKey.length < 2) {
-      continue;
+      if (!rawGoodMatch && item.score < 1200) continue;
     }
 
     const existing = strictMap.get(groupKey);
@@ -812,6 +1007,7 @@ function strictMatchResults(items, selected) {
   const selectedYear = String(selected?.year || '');
   const selectedShikimori = String(selected?.shikimoriId || '');
   const selectedKodik = String(selected?.kodikId || '');
+  const selectedVariants = expandQueryVariants(selectedTitle);
 
   let filtered = items.filter(item => {
     if (!isAllowedAnimeType(item)) return false;
@@ -826,11 +1022,13 @@ function strictMatchResults(items, selected) {
       (selectedKodik && itemKodik === selectedKodik);
 
     const titleMatch =
-      selectedTitle &&
+      selectedVariants.length &&
       itemTitles.some(itemTitle =>
-        itemTitle === selectedTitle ||
-        itemTitle.includes(selectedTitle) ||
-        selectedTitle.includes(itemTitle)
+        selectedVariants.some(selectedVariant =>
+          itemTitle === selectedVariant ||
+          itemTitle.includes(selectedVariant) ||
+          selectedVariant.includes(itemTitle)
+        )
       );
 
     const yearMatch = !selectedYear || itemYear === selectedYear;
@@ -842,10 +1040,12 @@ function strictMatchResults(items, selected) {
 
   filtered = items.filter(item => {
     const itemTitles = getAllTitles(item).map(normalizeSearchText);
-    return selectedTitle && itemTitles.some(itemTitle =>
-      itemTitle === selectedTitle ||
-      itemTitle.includes(selectedTitle) ||
-      selectedTitle.includes(itemTitle)
+    return selectedVariants.length && itemTitles.some(itemTitle =>
+      selectedVariants.some(selectedVariant =>
+        itemTitle === selectedVariant ||
+        itemTitle.includes(selectedVariant) ||
+        selectedVariant.includes(itemTitle)
+      )
     );
   });
 
@@ -935,26 +1135,35 @@ async function fetchAnimeBySelection(selected) {
   }
 
   if (selected?.title) {
-    const [searchData, listData] = await Promise.all([
-      kodikGet('/search', {
-        title: selected.title,
-        with_material_data: 'true',
-        with_episodes: 'true',
-        types: 'anime-serial,anime'
-      }),
-      kodikGet('/list', {
-        title: selected.title,
-        with_material_data: 'true',
-        with_episodes: 'true',
-        year: selected.year || undefined,
-        types: 'anime-serial,anime'
-      })
-    ]);
+    const searchVariants = expandQueryVariants(selected.title);
+    const requests = [];
 
-    let results = [
-      ...(Array.isArray(searchData?.results) ? searchData.results : []),
-      ...(Array.isArray(listData?.results) ? listData.results : [])
-    ];
+    for (const variant of searchVariants.slice(0, 8)) {
+      requests.push(
+        kodikGet('/search', {
+          title: variant,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          types: 'anime-serial,anime'
+        }),
+        kodikGet('/list', {
+          title: variant,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          year: selected.year || undefined,
+          types: 'anime-serial,anime'
+        })
+      );
+    }
+
+    const responses = await Promise.all(requests);
+    const results = [];
+
+    for (const response of responses) {
+      if (Array.isArray(response?.results)) {
+        results.push(...response.results);
+      }
+    }
 
     return await fetchFullEpisodesForLongAnime(results);
   }
@@ -1273,30 +1482,39 @@ app.get('/api/yummy/search', async (req, res) => {
       return res.status(400).json({ error: 'Введите минимум 2 символа для поиска' });
     }
 
-    const [searchData, listData] = await Promise.all([
-      kodikGet('/search', {
-        title: query,
-        with_material_data: 'true',
-        with_episodes: 'true',
-        types: 'anime-serial,anime'
-      }),
-      kodikGet('/list', {
-        title: query,
-        with_material_data: 'true',
-        with_episodes: 'true',
-        types: 'anime-serial,anime'
-      })
-    ]);
+    const expandedQueries = expandQueryVariants(query).slice(0, 8);
+    const requests = [];
 
-    const rawResults = [
-      ...(Array.isArray(searchData?.results) ? searchData.results : []),
-      ...(Array.isArray(listData?.results) ? listData.results : [])
-    ];
+    for (const q of expandedQueries) {
+      requests.push(
+        kodikGet('/search', {
+          title: q,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          types: 'anime-serial,anime'
+        }),
+        kodikGet('/list', {
+          title: q,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          types: 'anime-serial,anime'
+        })
+      );
+    }
+
+    const responses = await Promise.all(requests);
+
+    const rawResults = [];
+    for (const response of responses) {
+      if (Array.isArray(response?.results)) {
+        rawResults.push(...response.results);
+      }
+    }
 
     const mapped = rawResults
       .filter(isAllowedAnimeType)
       .map(item => makeSearchItem(item, query))
-      .filter(item => item.score >= 450);
+      .filter(item => item.score >= 250);
 
     const deduped = dedupeSearchResults(mapped, query)
       .sort((a, b) => {
@@ -1304,7 +1522,7 @@ app.get('/api/yummy/search', async (req, res) => {
         const bRank = b.score + (b.serialPriority ? 800 : 0);
         return bRank - aRank;
       })
-      .slice(0, 15)
+      .slice(0, 18)
       .map(({ score, serialPriority, titleKey, altTitles, ...item }) => item);
 
     res.json(deduped);
@@ -1330,9 +1548,11 @@ app.post('/api/yummy/anime/by-selection', async (req, res) => {
       return res.status(404).json({ error: 'Не удалось точно определить выбранное аниме' });
     }
 
-    const exactTitle = normalizeSearchText(selected.title);
+    const selectedVariants = expandQueryVariants(selected.title);
     const first = results.find(item =>
-      getAllTitles(item).some(title => normalizeSearchText(title) === exactTitle)
+      getAllTitles(item).some(title =>
+        selectedVariants.some(variant => normalizeSearchText(title) === normalizeSearchText(variant))
+      )
     ) || results[0];
 
     const restriction = isAnimeBlockedForRequest(req, selected, first);
