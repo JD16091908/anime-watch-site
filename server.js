@@ -50,11 +50,18 @@ app.use(helmet({
       frameAncestors: ["'none'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:", "https:"],
-      fontSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "wss:", "ws:", "https://anivmeste.ru", "https://www.anivmeste.ru", "https://anivmeste.onrender.com"],
-      frameSrc: ["'self'", "https:", "http:"],
-      mediaSrc: ["'self'", "https:", "http:"],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      fontSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: [
+        "'self'",
+        'wss:',
+        'ws:',
+        'https://anivmeste.ru',
+        'https://www.anivmeste.ru',
+        'https://anivmeste.onrender.com'
+      ],
+      frameSrc: ["'self'", 'https:', 'http:'],
+      mediaSrc: ["'self'", 'https:', 'http:'],
       manifestSrc: ["'self'"],
       upgradeInsecureRequests: []
     }
@@ -118,6 +125,24 @@ const SHIKIMORI_API_BASE = 'https://shikimori.one/api';
 const BLOCKED_ANIME_FILE = path.join(__dirname, 'blocked-anime.json');
 
 console.log(KODIK_TOKEN ? '✅ KODIK TOKEN загружен' : '❌ KODIK TOKEN не найден');
+
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'favicon.ico'), {
+    headers: {
+      'Content-Type': 'image/x-icon',
+      'Cache-Control': 'public, max-age=86400'
+    }
+  });
+});
+
+app.get('/favicon.png', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'favicon.png'), {
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=86400'
+    }
+  });
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: false,
@@ -1464,7 +1489,11 @@ io.on('connection', (socket) => {
   socket.on('join-room', ({ roomId, username, userKey, accessToken }) => {
     const safeRoomId = sanitizeRoomId(roomId);
     const safeAccessToken = sanitizeAccessToken(accessToken);
-    const socketIp = getClientIp({ headers: socket.handshake.headers, ip: socket.handshake.address, socket: { remoteAddress: socket.handshake.address } });
+    const socketIp = getClientIp({
+      headers: socket.handshake.headers,
+      ip: socket.handshake.address,
+      socket: { remoteAddress: socket.handshake.address }
+    });
 
     if (!safeRoomId || !userKey) {
       socket.emit('join-error', { message: 'Некорректные данные для входа в комнату' });

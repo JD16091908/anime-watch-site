@@ -531,13 +531,13 @@
   min-width: 280px;
   max-width: min(420px, calc(100vw - 32px));
   display: none;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  align-content: start;
 }
 
 .overlay-dropdown.open .overlay-dropdown-menu-episodes {
   display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-content: start;
 }
 
 .overlay-dropdown-item {
@@ -1084,6 +1084,9 @@
   .overlay-dropdown-menu-episodes {
     min-width: 220px;
     max-width: min(280px, calc(100vw - 20px));
+  }
+
+  .overlay-dropdown.open .overlay-dropdown-menu-episodes {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
   }
