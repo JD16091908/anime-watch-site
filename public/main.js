@@ -1,32 +1,6 @@
 const USERNAME_STORAGE = 'username';
-const MANUAL_USERNAME_STORAGE = 'saved_username_manual';
 
 const CONFIG = window.AnivmesteConfig || {};
-const SUPPORT_CONFIG = CONFIG.support || {};
-const BOOSTY_URL = SUPPORT_CONFIG.boostyUrl || '#';
-const DONATIONALERTS_URL = SUPPORT_CONFIG.donationAlertsUrl || '#';
-
-const RANDOM_NICK_ADJECTIVES = [
-  'Swift', 'Silent', 'Crimson', 'Silver', 'Golden', 'Shadow', 'Lunar', 'Solar', 'Misty', 'Stormy',
-  'Frozen', 'Burning', 'Shining', 'Dark', 'Bright', 'Wild', 'Calm', 'Rapid', 'Lucky', 'Cosmic',
-  'Electric', 'Ancient', 'Hidden', 'Secret', 'Fierce', 'Gentle', 'Brave', 'Noble', 'Clever', 'Crazy',
-  'Dreamy', 'Ghostly', 'Royal', 'Tiny', 'Mega', 'Hyper', 'Epic', 'Magic', 'Cyber', 'Neon',
-  'Velvet', 'Iron', 'Crystal', 'Phantom', 'Thunder', 'Ashen', 'Scarlet', 'Emerald', 'Ivory', 'Obsidian',
-  'Azure', 'Ruby', 'Sapphire', 'Amber', 'Pearl', 'Snowy', 'Windy', 'Dizzy', 'Mellow', 'Glowing',
-  'Stealthy', 'Vivid', 'Arcane', 'Quantum', 'Pixel', 'Turbo', 'Nova', 'Stellar', 'Void', 'Night',
-  'Dawn', 'Dusk', 'Blazing', 'Chill', 'Savage', 'Elegant', 'Fearless', 'Wicked', 'Radiant', 'Hollow'
-];
-
-const RANDOM_NICK_NOUNS = [
-  'Fox', 'Wolf', 'Tiger', 'Dragon', 'Phoenix', 'Raven', 'Falcon', 'Hawk', 'Panda', 'Rabbit',
-  'Samurai', 'Ninja', 'Ronin', 'Knight', 'Wizard', 'Mage', 'Hunter', 'Rider', 'Pirate', 'Guardian',
-  'Otter', 'Bear', 'Eagle', 'Shark', 'Panther', 'Lynx', 'Crow', 'Viper', 'Leopard', 'Cobra',
-  'Kitsune', 'Tanuki', 'Yokai', 'Spirit', 'Ghost', 'Demon', 'Angel', 'Comet', 'Meteor', 'Star',
-  'Moon', 'Blade', 'Arrow', 'Storm', 'Flame', 'Frost', 'Thunder', 'Shadow', 'Spark', 'Stone',
-  'Echo', 'Whisper', 'Glitch', 'Pixel', 'Byte', 'Cipher', 'Nova', 'Orbit', 'Voyager', 'Drifter',
-  'Wanderer', 'Sage', 'Monk', 'Brawler', 'Sniper', 'Scout', 'Captain', 'King', 'Queen', 'Prince',
-  'Princess', 'Beast', 'Slayer', 'Seeker', 'Walker', 'Chaser', 'Nomad', 'Reaper', 'Sentinel', 'Alchemist'
-];
 
 function safeLocalStorageGet(key) {
   try {
@@ -46,273 +20,81 @@ function safeLocalStorageSet(key, value) {
 }
 
 function sanitizeUsername(name) {
-  return String(name || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .slice(0, 30);
-}
-
-function pickRandomItem(items) {
-  if (!Array.isArray(items) || !items.length) return null;
-  const randomIndex = Math.floor(Math.random() * items.length);
-  return items[randomIndex] || null;
+  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
 }
 
 function generateRandomNickname() {
-  const adjective = pickRandomItem(RANDOM_NICK_ADJECTIVES) || 'Guest';
-  const noun = pickRandomItem(RANDOM_NICK_NOUNS) || 'User';
-  return `${adjective} ${noun}`.slice(0, 30);
-}
-
-function saveUsername(name, isManual = true) {
-  const username = sanitizeUsername(name);
-  if (!username) return '';
-
-  safeLocalStorageSet(USERNAME_STORAGE, username);
-  safeLocalStorageSet(MANUAL_USERNAME_STORAGE, isManual ? '1' : '0');
-
-  return username;
+  const adj = ['Swift', 'Silent', 'Crimson', 'Shadow', 'Wild', 'Epic', 'Neon', 'Velvet'];
+  const noun = ['Fox', 'Wolf', 'Dragon', 'Ninja', 'Hunter', 'Blade', 'Star', 'Ghost'];
+  return `${adj[Math.floor(Math.random() * adj.length)]} ${noun[Math.floor(Math.random() * noun.length)]}`;
 }
 
 function getSavedUsername() {
   const saved = sanitizeUsername(safeLocalStorageGet(USERNAME_STORAGE));
-  const hasManual = safeLocalStorageGet(MANUAL_USERNAME_STORAGE) === '1';
-
-  if (hasManual && saved) return saved;
   if (saved) return saved;
-
   const generated = generateRandomNickname();
-  saveUsername(generated, false);
+  safeLocalStorageSet(USERNAME_STORAGE, generated);
   return generated;
 }
 
-function sanitizeRoomId(value) {
-  return String(value || '')
-    .trim()
-    .replace(/\s+/g, '')
-    .replace(/[^a-zA-Z0-9_-]/g, '')
-    .slice(0, 120);
-}
-
-function generateSecureToken(length = 32) {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
-
+function generateSecureToken(length = 24) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i += 1) {
-    result += chars[array[i] % chars.length];
+    result += chars[Math.floor(Math.random() * chars.length)];
   }
   return result;
 }
 
-function generateRoomId() {
-  return `r_${generateSecureToken(24)}`;
-}
-
-function generateRoomAccessToken() {
-  return generateSecureToken(32);
-}
-
 function redirectToRoom(roomId, username, accessToken = '') {
-  const safeRoomId = sanitizeRoomId(roomId);
-  const safeUsername = sanitizeUsername(username);
-
-  if (!safeRoomId) {
-    alert('Не удалось определить ID комнаты');
-    return;
-  }
-
   const params = new URLSearchParams();
-  if (safeUsername) params.set('username', safeUsername);
+  if (username) params.set('username', username);
   if (accessToken) params.set('access', accessToken);
-
-  const query = params.toString() ? `?${params.toString()}` : '';
-  window.location.href = `/room/${encodeURIComponent(safeRoomId)}${query}`;
+  window.location.href = `/room/${roomId}?${params.toString()}`;
 }
 
-function debounce(fn, delay = 300) {
-  let timeoutId = null;
+function removeLegacyJoinControls() {
+  const legacyJoinBtn = document.getElementById('joinRoomBtn');
+  const legacyRoomInput = document.getElementById('roomId');
 
-  function debounced(...args) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      fn(...args);
-    }, delay);
+  if (legacyJoinBtn) {
+    legacyJoinBtn.remove();
   }
 
-  debounced.cancel = () => {
-    clearTimeout(timeoutId);
-    timeoutId = null;
-  };
-
-  return debounced;
-}
-
-window.AnivmesteDebounce = debounce;
-
-function setupRevealAnimations() {
-  const items = document.querySelectorAll('.reveal');
-  if (!items.length) return;
-
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (!entry.isIntersecting) return;
-      entry.target.classList.add('is-visible');
-      observer.unobserve(entry.target);
-    });
-  }, {
-    threshold: 0.12
-  });
-
-  items.forEach((item) => observer.observe(item));
-}
-
-function setupModal({
-  modalId,
-  openBtnId,
-  closeBtnId,
-  backdropId
-}) {
-  const modal = document.getElementById(modalId);
-  const openBtn = document.getElementById(openBtnId);
-  const closeBtn = document.getElementById(closeBtnId);
-  const backdrop = document.getElementById(backdropId);
-
-  if (!modal || !openBtn || !closeBtn || !backdrop) return null;
-
-  let isAnimating = false;
-
-  const open = () => {
-    if (isAnimating) return;
-
-    modal.classList.remove('hidden', 'is-hiding');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-
-    requestAnimationFrame(() => {
-      modal.classList.add('is-visible');
-    });
-  };
-
-  const close = () => {
-    if (isAnimating || modal.classList.contains('hidden')) return;
-
-    isAnimating = true;
-    modal.classList.remove('is-visible');
-    modal.classList.add('is-hiding');
-
-    setTimeout(() => {
-      modal.classList.add('hidden');
-      modal.classList.remove('is-hiding');
-      modal.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('modal-open');
-      isAnimating = false;
-    }, 220);
-  };
-
-  openBtn.addEventListener('click', open);
-  closeBtn.addEventListener('click', close);
-  backdrop.addEventListener('click', close);
-
-  return { modal, open, close };
-}
-
-function setupSupportContent() {
-  const description = document.getElementById('supportModalDescription');
-  const thanks = document.getElementById('supportModalThanks');
-  const boostyLink = document.getElementById('supportBoostyLink');
-  const donationAlertsLink = document.getElementById('supportDonationAlertsLink');
-
-  if (description) {
-    description.textContent = SUPPORT_CONFIG.description || '';
-  }
-
-  if (thanks) {
-    thanks.textContent = SUPPORT_CONFIG.thanksText || '';
-  }
-
-  if (boostyLink) {
-    boostyLink.href = BOOSTY_URL;
-  }
-
-  if (donationAlertsLink) {
-    donationAlertsLink.href = DONATIONALERTS_URL;
+  if (legacyRoomInput) {
+    const wrapper =
+      legacyRoomInput.closest('.form-group') ||
+      legacyRoomInput.parentElement;
+    if (wrapper) wrapper.remove();
   }
 }
 
 function setupHomeActions() {
+  removeLegacyJoinControls();
+
   const usernameInput = document.getElementById('username');
   const createRoomBtn = document.getElementById('createRoomBtn');
   const soloWatchBtn = document.getElementById('soloWatchBtn');
 
-  if (!usernameInput || !createRoomBtn || !soloWatchBtn) {
-    return;
-  }
+  if (!usernameInput || !createRoomBtn || !soloWatchBtn) return;
 
   usernameInput.value = getSavedUsername();
 
-  const resolveUsername = () => {
-    const raw = sanitizeUsername(usernameInput.value);
-    const username = raw || generateRandomNickname();
-    usernameInput.value = username;
-    saveUsername(username, true);
-    return username;
+  const getUsername = () => {
+    const u = sanitizeUsername(usernameInput.value) || generateRandomNickname();
+    safeLocalStorageSet(USERNAME_STORAGE, u);
+    return u;
   };
 
   createRoomBtn.addEventListener('click', () => {
-    const username = resolveUsername();
-    const roomId = generateRoomId();
-    const accessToken = generateRoomAccessToken();
-    redirectToRoom(roomId, username, accessToken);
+    const roomId = `r_${generateSecureToken(24)}`;
+    const access = generateSecureToken(32);
+    redirectToRoom(roomId, getUsername(), access);
   });
 
   soloWatchBtn.addEventListener('click', () => {
-    const username = resolveUsername();
-    redirectToRoom('solo', username);
-  });
-
-  usernameInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      createRoomBtn.click();
-    }
+    redirectToRoom('solo', getUsername());
   });
 }
 
-function init() {
-  setupRevealAnimations();
-  setupSupportContent();
-  setupHomeActions();
-
-  const aboutModalApi = setupModal({
-    modalId: 'aboutModal',
-    openBtnId: 'aboutServiceBtn',
-    closeBtnId: 'closeAboutModalBtn',
-    backdropId: 'aboutModalBackdrop'
-  });
-
-  const supportModalApi = setupModal({
-    modalId: 'supportModal',
-    openBtnId: 'supportProjectBtn',
-    closeBtnId: 'closeSupportModalBtn',
-    backdropId: 'supportModalBackdrop'
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-
-    const supportModal = supportModalApi?.modal;
-    const aboutModal = aboutModalApi?.modal;
-
-    if (supportModal && !supportModal.classList.contains('hidden')) {
-      supportModalApi.close();
-      return;
-    }
-
-    if (aboutModal && !aboutModal.classList.contains('hidden')) {
-      aboutModalApi.close();
-    }
-  });
-}
-
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', setupHomeActions);

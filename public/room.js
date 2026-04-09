@@ -1,4 +1,86 @@
-const socket = io();
+function createNoopSocket() {
+  return {
+    on() {},
+    emit() {},
+    off() {}
+  };
+}
+
+if (!window.AnivmesteDebounce) {
+  window.AnivmesteDebounce = function anivmesteDebounce(fn, wait = 300) {
+    let timer = null;
+    function wrapped(...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    }
+    wrapped.cancel = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    };
+    return wrapped;
+  };
+}
+
+if (!window.ChatModule) {
+  window.ChatModule = {
+    appendSystemMessage(container, text) {
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'chat-system-message';
+      el.textContent = text;
+      container.appendChild(el);
+      container.scrollTop = container.scrollHeight;
+    },
+    appendMessage(container, payload) {
+      if (!container) return;
+      const wrap = document.createElement('div');
+      wrap.className = `chat-message ${payload?.isSelf ? 'self' : ''}`;
+      wrap.innerHTML = `
+        <div class="chat-message-head">${String(payload?.username || 'Guest')} • ${String(payload?.time || '')}</div>
+        <div class="chat-message-text">${String(payload?.message || '')}</div>
+      `;
+      container.appendChild(wrap);
+      container.scrollTop = container.scrollHeight;
+    }
+  };
+}
+
+if (!window.PlayerModule) {
+  window.PlayerModule = {
+    detectPlayerType(src) {
+      return String(src || '').includes('kodik') ? 'kodik' : 'iframe';
+    },
+    mountIframe(container, { src, title }) {
+      if (!container) return;
+      container.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.src = src;
+      iframe.title = title || 'Player';
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+      iframe.allowFullscreen = true;
+      iframe.setAttribute('frameborder', '0');
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      container.appendChild(iframe);
+    },
+    showPlaceholder(container, { title, description }) {
+      if (!container) return;
+      container.innerHTML = `
+        <div class="placeholder">
+          <h3>${String(title || '')}</h3>
+          <p>${String(description || '')}</p>
+        </div>
+      `;
+    },
+    pause() {},
+    play() {},
+    seekTo() {},
+    onVideoChanged() {},
+    onEpisodeEnded() {}
+  };
+}
+
+const socket = typeof io === 'function' ? io() : createNoopSocket();
 
 const CONFIG = window.AnivmesteConfig || {};
 const SUPPORT_CONFIG = CONFIG.support || {};
@@ -17,11 +99,8 @@ function updateRoomDocumentMeta(currentRoomId) {
   document.title = `${title} — Anivmeste`;
 
   const roomTitleEl = document.getElementById('roomTitle');
-  if (roomTitleEl) {
-    roomTitleEl.textContent = title;
-  }
+  if (roomTitleEl) roomTitleEl.textContent = title;
 }
-
 updateRoomDocumentMeta(roomId);
 
 const USER_KEY_STORAGE = 'anivmeste_user_key';
@@ -30,107 +109,11 @@ const MANUAL_USERNAME_STORAGE = 'saved_username_manual';
 
 const SEARCH_MIN_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
-const SEARCH_CLIENT_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+const SEARCH_CLIENT_CACHE_TTL_MS = 3 * 60 * 1000;
 const SEARCH_CLIENT_CACHE_MAX = 70;
 
-const RANDOM_NICK_ADJECTIVES = [
-  'Swift', 'Silent', 'Crimson', 'Silver', 'Golden', 'Shadow', 'Lunar', 'Solar', 'Misty', 'Stormy',
-  'Frozen', 'Burning', 'Shining', 'Dark', 'Bright', 'Wild', 'Calm', 'Rapid', 'Lucky', 'Cosmic',
-  'Electric', 'Ancient', 'Hidden', 'Secret', 'Fierce', 'Gentle', 'Brave', 'Noble', 'Clever', 'Crazy',
-  'Dreamy', 'Ghostly', 'Royal', 'Tiny', 'Mega', 'Hyper', 'Epic', 'Magic', 'Cyber', 'Neon',
-  'Velvet', 'Iron', 'Crystal', 'Phantom', 'Thunder', 'Ashen', 'Scarlet', 'Emerald', 'Ivory', 'Obsidian',
-  'Azure', 'Ruby', 'Sapphire', 'Amber', 'Pearl', 'Snowy', 'Windy', 'Dizzy', 'Mellow', 'Glowing',
-  'Stealthy', 'Vivid', 'Arcane', 'Quantum', 'Pixel', 'Turbo', 'Nova', 'Stellar', 'Void', 'Night',
-  'Dawn', 'Dusk', 'Blazing', 'Chill', 'Savage', 'Elegant', 'Fearless', 'Wicked', 'Radiant', 'Hollow'
-];
-
-const RANDOM_NICK_NOUNS = [
-  'Fox', 'Wolf', 'Tiger', 'Dragon', 'Phoenix', 'Raven', 'Falcon', 'Hawk', 'Panda', 'Rabbit',
-  'Samurai', 'Ninja', 'Ronin', 'Knight', 'Wizard', 'Mage', 'Hunter', 'Rider', 'Pirate', 'Guardian',
-  'Otter', 'Bear', 'Eagle', 'Shark', 'Panther', 'Lynx', 'Crow', 'Viper', 'Leopard', 'Cobra',
-  'Kitsune', 'Tanuki', 'Yokai', 'Spirit', 'Ghost', 'Demon', 'Angel', 'Comet', 'Meteor', 'Star',
-  'Moon', 'Blade', 'Arrow', 'Storm', 'Flame', 'Frost', 'Thunder', 'Shadow', 'Spark', 'Stone',
-  'Echo', 'Whisper', 'Glitch', 'Pixel', 'Byte', 'Cipher', 'Nova', 'Orbit', 'Voyager', 'Drifter',
-  'Wanderer', 'Sage', 'Monk', 'Brawler', 'Sniper', 'Scout', 'Captain', 'King', 'Queen', 'Prince',
-  'Princess', 'Beast', 'Slayer', 'Seeker', 'Walker', 'Chaser', 'Nomad', 'Reaper', 'Sentinel', 'Alchemist'
-];
-
-function safeLocalStorageGet(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeLocalStorageSet(key, value) {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function sanitizeUsername(name) {
-  return String(name || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .slice(0, 30);
-}
-
-function normalizeSearchQuery(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .replace(/\s+/g, ' ');
-}
-
-function pickRandomItem(items) {
-  if (!Array.isArray(items) || !items.length) return null;
-  return items[Math.floor(Math.random() * items.length)] || null;
-}
-
-function generateRandomNickname() {
-  const adjective = pickRandomItem(RANDOM_NICK_ADJECTIVES) || 'Guest';
-  const noun = pickRandomItem(RANDOM_NICK_NOUNS) || 'User';
-  return `${adjective} ${noun}`.slice(0, 30);
-}
-
-function resolveInitialUsername() {
-  const usernameFromQuery = sanitizeUsername(params.get('username'));
-  const savedUsername = sanitizeUsername(safeLocalStorageGet(USERNAME_STORAGE));
-  const hasManualUsername = safeLocalStorageGet(MANUAL_USERNAME_STORAGE) === '1';
-
-  if (usernameFromQuery) {
-    safeLocalStorageSet(USERNAME_STORAGE, usernameFromQuery);
-    safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '1');
-    return usernameFromQuery;
-  }
-
-  if (hasManualUsername && savedUsername) {
-    return savedUsername;
-  }
-
-  const randomUsername = generateRandomNickname();
-  safeLocalStorageSet(USERNAME_STORAGE, randomUsername);
-  safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '0');
-  return randomUsername;
-}
-
-let username = resolveInitialUsername();
-
-function getOrCreateUserKey() {
-  let key = safeLocalStorageGet(USER_KEY_STORAGE);
-  if (!key) {
-    key = `uk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    safeLocalStorageSet(USER_KEY_STORAGE, key);
-  }
-  return key;
-}
-
-const userKey = getOrCreateUserKey();
+let showAllSearchResults = false;
+let lastSearchResults = [];
 
 let isHost = false;
 let selectedAnime = null;
@@ -138,28 +121,10 @@ let selectedPlayer = null;
 let selectedSeason = null;
 let latestSearchToken = 0;
 let pendingPlaybackApply = null;
-let isRemoteAction = false;
 let userInteractedWithPlayer = false;
 let hostTimeBroadcastTimer = null;
-let kodikTimeRequestTimer = null;
 let userTimeBroadcastTimer = null;
-let hostPlaybackGuardTimer = null;
-let playbackDriftCheckTimer = null;
 let hasShownHostMessage = false;
-let lastKnownHostTime = null;
-let lastKnownHostTimeAt = 0;
-let hasShownFirstEpisodeHint = false;
-let watchOrderExpanded = true;
-let watchOrderExtrasExpanded = false;
-
-let isOverlayPlayerOpen = false;
-let isOverlaySeasonOpen = false;
-let isOverlayEpisodeOpen = false;
-
-let lastSentSeekAt = 0;
-let lastAppliedTargetTime = null;
-let lastAppliedAt = 0;
-let lastForcedSyncAt = 0;
 let audioContext = null;
 let latestRoomUsers = [];
 let usersRenderTicker = null;
@@ -184,7 +149,6 @@ let currentState = {
 
 const hostBadge = document.getElementById('hostBadge');
 const usersList = document.getElementById('usersList');
-const placeholder = document.getElementById('placeholder');
 const animeList = document.getElementById('animeList');
 const searchInput = document.getElementById('searchInput');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
@@ -200,24 +164,6 @@ const hostSearchHint = document.getElementById('hostSearchHint');
 const nicknameInput = document.getElementById('nicknameInput');
 const saveNicknameBtn = document.getElementById('saveNicknameBtn');
 
-const playerTopOverlay = document.getElementById('playerTopOverlay');
-
-const overlayPlayerDropdown = document.getElementById('overlayPlayerDropdown');
-const overlaySeasonDropdown = document.getElementById('overlaySeasonDropdown');
-const overlayEpisodeDropdown = document.getElementById('overlayEpisodeDropdown');
-
-const overlayPlayerBtn = document.getElementById('overlayPlayerBtn');
-const overlaySeasonBtn = document.getElementById('overlaySeasonBtn');
-const overlayEpisodeBtn = document.getElementById('overlayEpisodeBtn');
-
-const overlayPlayerBtnText = document.getElementById('overlayPlayerBtnText');
-const overlaySeasonBtnText = document.getElementById('overlaySeasonBtnText');
-const overlayEpisodeBtnText = document.getElementById('overlayEpisodeBtnText');
-
-const overlayPlayerMenu = document.getElementById('overlayPlayerMenu');
-const overlaySeasonMenu = document.getElementById('overlaySeasonMenu');
-const overlayEpisodeMenu = document.getElementById('overlayEpisodeMenu');
-
 const roomSupportModal = document.getElementById('roomSupportModal');
 const roomSupportModalBackdrop = document.getElementById('roomSupportModalBackdrop');
 const closeRoomSupportModalBtn = document.getElementById('closeRoomSupportModalBtn');
@@ -226,29 +172,50 @@ const roomSupportThanks = document.getElementById('roomSupportThanks');
 const roomSupportBoostyLink = document.getElementById('roomSupportBoostyLink');
 const roomSupportDonationAlertsLink = document.getElementById('roomSupportDonationAlertsLink');
 
-if (nicknameInput) {
-  nicknameInput.value = username;
+if (roomSupportDescription) roomSupportDescription.textContent = SUPPORT_CONFIG.description || '';
+if (roomSupportThanks) roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText || '';
+if (roomSupportBoostyLink) roomSupportBoostyLink.href = BOOSTY_URL;
+if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
+
+function safeLocalStorageGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function safeLocalStorageSet(key, value) { try { localStorage.setItem(key, value); return true; } catch { return false; } }
+function sanitizeUsername(name) { return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30); }
+
+function normalizeSearchQuery(value) {
+  return String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
 
-if (roomSupportDescription) {
-  roomSupportDescription.textContent = SUPPORT_CONFIG.description || '';
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
-if (roomSupportThanks) {
-  roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText || '';
+
+function canControl() { return roomId === 'solo' || isHost; }
+
+function getMoscowTimeString() {
+  return new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(new Date());
 }
-if (roomSupportBoostyLink) {
-  roomSupportBoostyLink.href = BOOSTY_URL;
-}
-if (roomSupportDonationAlertsLink) {
-  roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
+
+function sys(text) {
+  if (!text) return;
+  if (chatMessages && window.ChatModule) {
+    window.ChatModule.appendSystemMessage(chatMessages, text);
+  }
 }
 
 function ensureAudioContext() {
   if (audioContext) return audioContext;
-
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
-
   audioContext = new AudioCtx();
   return audioContext;
 }
@@ -256,7 +223,6 @@ function ensureAudioContext() {
 function unlockAudioContext() {
   const ctx = ensureAudioContext();
   if (!ctx) return;
-
   if (ctx.state === 'suspended') {
     ctx.resume().catch(() => {});
   }
@@ -266,58 +232,22 @@ function playChatSound() {
   try {
     const ctx = ensureAudioContext();
     if (!ctx) return;
-
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
-
     const now = ctx.currentTime;
-
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    const gain2 = ctx.createGain();
-    const masterGain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    osc1.type = 'sine';
-    osc2.type = 'triangle';
-
-    osc1.frequency.setValueAtTime(1320, now);
-    osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.045);
-
-    osc2.frequency.setValueAtTime(990, now);
-    osc2.frequency.exponentialRampToValueAtTime(1320, now + 0.05);
-
-    gain1.gain.setValueAtTime(0.0001, now);
-    gain1.gain.exponentialRampToValueAtTime(0.018, now + 0.006);
-    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-
-    gain2.gain.setValueAtTime(0.0001, now);
-    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.006);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(3200, now);
-    filter.Q.setValueAtTime(0.6, now);
-
-    masterGain.gain.setValueAtTime(0.9, now);
-
-    osc1.connect(gain1);
-    osc2.connect(gain2);
-    gain1.connect(filter);
-    gain2.connect(filter);
-    filter.connect(masterGain);
-    masterGain.connect(ctx.destination);
-
-    osc1.start(now);
-    osc2.start(now);
-
-    osc1.stop(now + 0.085);
-    osc2.stop(now + 0.085);
-  } catch (error) {
-    console.warn('Не удалось воспроизвести звук чата:', error);
-  }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1300, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.02, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  } catch {}
 }
 
 function openRoomSupportModal() {
@@ -332,7 +262,6 @@ function closeRoomSupportModal() {
   if (!roomSupportModal || roomSupportModal.classList.contains('hidden')) return;
   roomSupportModal.classList.remove('is-visible');
   roomSupportModal.classList.add('is-hiding');
-
   setTimeout(() => {
     roomSupportModal.classList.add('hidden');
     roomSupportModal.classList.remove('is-hiding');
@@ -341,265 +270,25 @@ function closeRoomSupportModal() {
   }, 220);
 }
 
-const canControl = () => roomId === 'solo' || isHost;
-
-function getMoscowTimeString() {
-  return new Intl.DateTimeFormat('ru-RU', {
-    timeZone: 'Europe/Moscow',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).format(new Date());
-}
-
-function sys(text) {
-  if (!text) return;
-  console.debug('[sys]', text);
-  if (chatMessages && window.ChatModule) {
-    ChatModule.appendSystemMessage(chatMessages, text);
-  }
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-async function readJsonSafely(response) {
-  const contentType = response.headers.get('content-type') || '';
-  const text = await response.text();
-
-  if (!contentType.includes('application/json')) {
-    throw new Error(`Сервер вернул не JSON. Проверь деплой API маршрутов. HTTP ${response.status}`);
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error('Сервер вернул битый JSON');
-  }
-}
-
-function normalizeUrl(url) {
-  if (!url) return url;
-  if (String(url).startsWith('//')) return `https:${url}`;
-  return String(url);
-}
-
-function formatWatchTime(seconds) {
-  const total = Math.max(0, Math.floor(Number(seconds) || 0));
-  const hrs = Math.floor(total / 3600);
-  const mins = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-
-  if (hrs > 0) {
-    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-}
-
-function getPlayerName(video) {
-  return String(video?.player || video?.dubbing || 'unknown').trim();
-}
-
-function getEpisodeNumber(video) {
-  return Number(video?.number) || Number(video?.index) || 0;
-}
-
-function getSeasonNumber(video) {
-  const season = Number(video?.season);
-  return season > 0 ? season : 1;
-}
-
-function getIframeUrl(video) {
-  return video?.iframeUrl || video?.iframe_url || null;
-}
-
-function sortSearchResults(items) {
-  return [...(items || [])].sort((a, b) => {
-    // Highest score first
-    if (b.score !== a.score) return b.score - a.score;
-
-    // Serials first
-    if (b.serialPriority !== a.serialPriority) return b.serialPriority - a.serialPriority;
-
-    // Latest year first
-    const yearA = Number(a?.year) || 9999;
-    const yearB = Number(b?.year) || 9999;
-    if (yearA !== yearB) return yearB - yearA;
-
-    // Alphabetical title
-    return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
-  });
-}
-
-function buildSearchSignature(items, expanded) {
-  const ids = (items || []).map(item => `${item.animeId || ''}:${item.title || ''}:${item.year || ''}`).join('|');
-  return `${expanded ? '1' : '0'}::${ids}`;
-}
-
-function pruneClientSearchCache() {
-  const now = Date.now();
-
-  for (const [key, entry] of clientSearchCache.entries()) {
-    if (!entry || now - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
-      clientSearchCache.delete(key);
-    }
-  }
-
-  if (clientSearchCache.size <= SEARCH_CLIENT_CACHE_MAX) return;
-
-  const entries = [...clientSearchCache.entries()]
-    .sort((a, b) => a[1].createdAt - b[1].createdAt);
-
-  while (entries.length && clientSearchCache.size > SEARCH_CLIENT_CACHE_MAX) {
-    const [oldestKey] = entries.shift();
-    clientSearchCache.delete(oldestKey);
-  }
-}
-
-function getClientCachedSearch(query) {
-  pruneClientSearchCache();
-  const entry = clientSearchCache.get(query);
-  if (!entry) return null;
-
-  if (Date.now() - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
-    clientSearchCache.delete(query);
-    return null;
-  }
-
-  return entry.data;
-}
-
-function setClientCachedSearch(query, data) {
-  pruneClientSearchCache();
-  clientSearchCache.set(query, {
-    createdAt: Date.now(),
-    data
-  });
-}
-
-function clearSearchResultsUi() {
-  if (animeList) {
-    animeList.innerHTML = '';
-    animeList.classList.remove('visible');
-  }
-  lastRenderedSearchSignature = '';
-}
-
-function getUniquePlayers(videos) {
-  const map = new Map();
-
-  for (const video of videos || []) {
-    const iframeUrl = getIframeUrl(video);
-    if (!iframeUrl) continue;
-
-    const name = getPlayerName(video);
-    if (!map.has(name)) {
-      map.set(name, { name, count: 1 });
-    } else {
-      map.get(name).count += 1;
-    }
-  }
-
-  return [...map.values()].sort((a, b) => {
-    if (b.count !== a.count) return b.count - a.count;
-    return a.name.localeCompare(b.name, 'ru');
-  });
-}
-
-function getVideosBySelectedPlayer(videos) {
-  if (!selectedPlayer) return [];
-  return (videos || []).filter(v => getPlayerName(v) === selectedPlayer && !!getIframeUrl(v));
-}
-
-function getUniqueSeasons(videos) {
-  const map = new Map();
-
-  for (const video of videos || []) {
-    const season = getSeasonNumber(video);
-    if (!map.has(season)) {
-      map.set(season, { season, count: 1 });
-    } else {
-      map.get(season).count += 1;
-    }
-  }
-
-  return [...map.values()].sort((a, b) => a.season - b.season);
-}
-
-function getVideosBySelectedSeason(videos) {
-  if (!selectedSeason) return [];
-  return (videos || []).filter(v => getSeasonNumber(v) === selectedSeason);
-}
-
-function getUniqueEpisodes(videos) {
-  const map = new Map();
-
-  for (const video of videos || []) {
-    const ep = getEpisodeNumber(video);
-    const url = getIframeUrl(video);
-    if (!ep || !url) continue;
-
-    if (!map.has(ep)) {
-      map.set(ep, { ...video, episodeNumber: ep });
-    }
-  }
-
-  return [...map.values()].sort((a, b) => a.episodeNumber - b.episodeNumber);
-}
-
-function findDefaultContext(videos) {
-  const players = getUniquePlayers(videos);
-  if (!players.length) return null;
-
-  const player = players[0].name;
-  const byPlayer = (videos || []).filter(v => getPlayerName(v) === player && !!getIframeUrl(v));
-  const seasons = getUniqueSeasons(byPlayer);
-  const season = seasons[0]?.season || 1;
-  const bySeason = byPlayer.filter(v => getSeasonNumber(v) === season);
-  const episodes = getUniqueEpisodes(bySeason);
-  const episode = episodes[0] || null;
-
-  if (!episode) return null;
-
-  return { player, season, episode };
-}
-
 function updateControlState() {
   const disabled = !canControl();
-
   if (searchInput) {
     searchInput.disabled = disabled;
-    searchInput.placeholder = disabled
-      ? 'Только хост может искать аниме'
-      : 'Введите название аниме...';
+    searchInput.placeholder = disabled ? 'Только хост может искать аниме' : 'Введите название аниме...';
   }
-
   if (hostSearchHint) {
     hostSearchHint.textContent = disabled
       ? 'Искать и выбирать тайтл может только хост комнаты'
       : 'Вы можете искать тайтлы и запускать плеер для всей комнаты';
   }
+  if (hostBadge) hostBadge.textContent = canControl() ? 'Хост' : 'Зритель';
+  animeList?.querySelectorAll('button').forEach((btn) => { btn.disabled = disabled; });
+}
 
-  if (hostBadge) {
-    hostBadge.textContent = canControl() ? '👑 Хост' : '👀 Зритель';
-  }
-
-  animeList?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
-
-  overlayPlayerBtn && (overlayPlayerBtn.disabled = disabled);
-  overlaySeasonBtn && (overlaySeasonBtn.disabled = disabled);
-  overlayEpisodeBtn && (overlayEpisodeBtn.disabled = disabled);
-
-  overlayPlayerMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
-  overlaySeasonMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
-  overlayEpisodeMenu?.querySelectorAll('button').forEach(btn => btn.disabled = disabled);
+function showPlaceholderUi(title = 'Ничего не выбрано', description = 'Выберите аниме') {
+  const playerWrapper = document.getElementById('playerWrapper');
+  if (!playerWrapper || !window.PlayerModule) return;
+  window.PlayerModule.showPlaceholder(playerWrapper, { title, description });
 }
 
 function updateSelectedAnimeInfoContent(anime = null) {
@@ -615,12 +304,6 @@ function updateSelectedAnimeInfoContent(anime = null) {
     return;
   }
 
-  const players = getUniquePlayers(anime?.videos || []);
-  const seasons = getUniqueSeasons(anime?.videos || []);
-  const episodes = getUniqueEpisodes(anime?.videos || []);
-
-  const descriptionContent = anime.description ? `<p class="selected-anime-description">${escapeHtml(anime.description)}</p>` : '';
-
   selectedAnimeInfo.innerHTML = `
     <div class="selected-anime-layout">
       ${anime.poster ? `<img class="selected-anime-poster" src="${escapeHtml(anime.poster)}" loading="lazy" alt="${escapeHtml(anime.title)}">` : ''}
@@ -629,401 +312,154 @@ function updateSelectedAnimeInfoContent(anime = null) {
         <div class="selected-anime-meta">
           ${anime.year ? `${escapeHtml(anime.year)}` : ''}${anime.type ? ` • ${escapeHtml(anime.type)}` : ''}${anime.status ? ` • ${escapeHtml(anime.status)}` : ''}
         </div>
-        ${descriptionContent}
-        <div class="selected-anime-extra">
-          Озвучек: ${players.length} • Сезонов: ${seasons.length} • Серий: ${episodes.length}
-        </div>
+        ${anime.description ? `<p class="selected-anime-description">${escapeHtml(anime.description)}</p>` : ''}
       </div>
     </div>
   `;
 }
 
-
-function showPlaceholderUi(title = 'Ничего не выбрано', description = 'Выберите аниме') {
-  const playerWrapper = document.getElementById('playerWrapper');
-  if (!playerWrapper || !window.PlayerModule) return;
-  window.PlayerModule.showPlaceholder(playerWrapper, { title, description });
-}
-
-function showBlockedAnimeMessage(message = 'Данное аниме запрещено на территории вашей страны') {
-  selectedAnime = null; // Clear selected anime state
-  currentState = { // Reset current player state
-    animeId: null,
-    animeUrl: null,
-    episodeNumber: null,
-    embedUrl: null,
-    title: null,
-    duration: 0,
-    playback: {
-      paused: true,
-      currentTime: 0,
-      updatedAt: Date.now()
+function readJsonSafely(response) {
+  return response.text().then((text) => {
+    const ct = response.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      throw new Error(`Сервер вернул не JSON. HTTP ${response.status}`);
     }
-  };
-
-  updateSelectedAnimeInfoContent(null); // Clear selected anime UI
-  showPlaceholderUi('Просмотр недоступен', message); // Show blocked message in player area
-}
-
-function showViewerHint(text = 'Если видео не стартовало автоматически, кликните по плееру один раз. После этого play/pause будут работать лучше.') {
-  const playerWrapper = document.getElementById('playerWrapper');
-  if (!playerWrapper || !window.PlayerModule || isHost || roomId === 'solo') return;
-
-  window.PlayerModule.showPlaceholder(playerWrapper, {
-    title: 'Серия загружена',
-    description: text
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('Сервер вернул битый JSON');
+    }
   });
-  playerWrapper.querySelector('.placeholder')?.classList.add('placeholder-click-through');
 }
 
-function hideViewerHintOverlay() {
-  const playerWrapper = document.getElementById('playerWrapper');
-  if (!playerWrapper) return;
-  const placeholderEl = playerWrapper.querySelector('.placeholder');
-  if (!placeholderEl) return;
-  if (!placeholderEl.classList.contains('placeholder-click-through')) return;
-  placeholderEl.style.display = 'none';
+function formatWatchTime(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hrs > 0) return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-function showFirstEpisodeHintForHost() {
-  if (!isHost || roomId === 'solo' || hasShownFirstEpisodeHint) return;
-  hasShownFirstEpisodeHint = true;
-  sys('После загрузки первой серии при необходимости кликните по плееру один раз и нажмите play.');
-}
+function stopHostPlaybackGuard() {}
+function startHostPlaybackGuard() {}
+function startPlaybackDriftCheck() {}
+function stopPlaybackDriftCheck() {}
 
-let bridge = {
-  playerType: 'unknown',
-  iframeWindow: null
-};
+function applyPlaybackStateWhenReady(pb, retries = 10) {
+  if (!window.PlayerModule) return;
+  if (!pb || retries <= 0) return;
 
-function resetBridge() {
-  bridge = {
-    playerType: 'unknown',
-    iframeWindow: null
-  };
+  const currentTime = typeof pb.currentTime === 'number' ? pb.currentTime : null;
+  const paused = !!pb.paused;
+
+  if (currentTime !== null && typeof window.PlayerModule.seekTo === 'function') {
+    try { window.PlayerModule.seekTo(currentTime); } catch {}
+  }
+
+  if (paused && typeof window.PlayerModule.pause === 'function') {
+    try { window.PlayerModule.pause(); } catch {}
+  } else if (!paused && typeof window.PlayerModule.play === 'function') {
+    try { window.PlayerModule.play(); } catch {}
+  }
 }
 
 function loadIframe(embedUrl) {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper || !window.PlayerModule) return;
 
+  stopHostPlaybackGuard();
+  stopPlaybackDriftCheck();
+
   if (!embedUrl) {
     showPlaceholderUi('Серия не запущена', 'У выбранного тайтла отсутствует iframe');
     return;
   }
 
-  stopHostTimers();
-  stopUserTimeTimer();
-  stopHostPlaybackGuard();
-  stopPlaybackDriftCheck();
-  resetBridge();
-  lastKnownHostTime = null;
-  lastKnownHostTimeAt = 0;
-  lastAppliedTargetTime = null;
-  lastAppliedAt = 0;
-  lastForcedSyncAt = 0;
-
-  window.PlayerModule.mountIframe(playerWrapper, { src: embedUrl, title: currentState.title });
-  bridge.playerType = window.PlayerModule.detectPlayerType(embedUrl); // Assuming PlayerModule has detectPlayerType
-
-  // Ensure initial pause after mounting
-  setTimeout(() => {
-    window.PlayerModule.pause();
-  }, 250);
-
-  if (bridge.playerType === 'kodik') {
-    startUserTimeTimer();
-  }
-
-  if (isHost && bridge.playerType === 'kodik') {
-    startHostTimers();
-    startHostPlaybackGuard();
-    showFirstEpisodeHintForHost();
-  } else if (!isHost && roomId !== 'solo' && bridge.playerType === 'kodik') {
-    startPlaybackDriftCheck();
-  }
+  window.PlayerModule.mountIframe(playerWrapper, { src: embedUrl, title: currentState.title || 'Плеер' });
 
   if (pendingPlaybackApply) {
     const pb = pendingPlaybackApply;
     pendingPlaybackApply = null;
-    setTimeout(() => applyPlaybackStateWhenReady(pb, 12), 500);
-  }
-
-  if (!isHost && roomId !== 'solo') {
-    setTimeout(() => {
-      if (!userInteractedWithPlayer) {
-        showViewerHint('Если серия не стартовала, нажмите прямо по плееру один раз. Подсказка не мешает клику.');
-      }
-    }, 800);
+    setTimeout(() => applyPlaybackStateWhenReady(pb), 500);
   }
 }
 
-function startHostTimers() {
-  stopHostTimers();
+function resolveInitialUsername() {
+  const usernameFromQuery = sanitizeUsername(params.get('username'));
+  const savedUsername = sanitizeUsername(safeLocalStorageGet(USERNAME_STORAGE));
+  const hasManualUsername = safeLocalStorageGet(MANUAL_USERNAME_STORAGE) === '1';
 
-  kodikTimeRequestTimer = setInterval(() => {
-    if (!isHost || !currentState.embedUrl) return;
-    // Assuming PlayerModule has requestKodikTime
-    // PlayerModule.requestKodikTime();
-  }, 900);
-
-  hostTimeBroadcastTimer = setInterval(() => {
-    if (!isHost || roomId === 'solo') return;
-
-    const ct = currentState.playback.currentTime;
-    if (typeof ct === 'number' && ct >= 0) {
-      socket.emit('player-control', {
-        roomId,
-        action: 'timeupdate',
-        currentTime: ct
-      });
-    }
-  }, 900);
-}
-
-function stopHostTimers() {
-  if (kodikTimeRequestTimer) {
-    clearInterval(kodikTimeRequestTimer);
-    kodikTimeRequestTimer = null;
-  }
-  if (hostTimeBroadcastTimer) {
-    clearInterval(hostTimeBroadcastTimer);
-    hostTimeBroadcastTimer = null;
-  }
-}
-
-function startUserTimeTimer() {
-  stopUserTimeTimer();
-
-  if (roomId === 'solo') return;
-
-  userTimeBroadcastTimer = setInterval(() => {
-    if (!currentState.embedUrl) return;
-    if (window.PlayerModule && window.PlayerModule.playerType !== 'kodik') return; // Fixed playerType access
-
-    // Assuming PlayerModule has requestKodikTime
-    // PlayerModule.requestKodikTime();
-
-    const ct = currentState.playback.currentTime;
-    if (typeof ct === 'number' && ct >= 0) {
-      socket.emit('update-user-time', {
-        roomId,
-        currentTime: ct
-      });
-    }
-  }, 1000);
-}
-
-function stopUserTimeTimer() {
-  if (userTimeBroadcastTimer) {
-    clearInterval(userTimeBroadcastTimer);
-    userTimeBroadcastTimer = null;
-  }
-}
-
-function getDisplayedUserTime(user) {
-  const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
-  if (!hasTime) return null;
-
-  const baseTime = Number(user.currentTime) || 0;
-  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
-
-  if (!updatedAt) return baseTime;
-
-  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
-  return baseTime + diffSeconds;
-}
-
-function renderUsers(users) {
-  if (!usersList) return;
-
-  if (Array.isArray(users)) {
-    latestRoomUsers = users.map(user => ({ ...user }));
+  if (usernameFromQuery) {
+    safeLocalStorageSet(USERNAME_STORAGE, usernameFromQuery);
+    safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '1');
+    return usernameFromQuery;
   }
 
-  if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
-    usersList.innerHTML = `<div class="empty-state">Пока никого нет</div>`;
-    return;
-  }
+  if (hasManualUsername && savedUsername) return savedUsername;
 
-  usersList.innerHTML = latestRoomUsers.map(user => {
-    const displayTime = getDisplayedUserTime(user);
-    const timeText = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '—:—';
-
-    return `
-      <div class="user-item">
-        <div class="user-main">
-          <div class="user-identity">
-            <span class="user-name">${escapeHtml(user.username)}</span>
-            ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
-          </div>
-          <div class="user-time" title="Текущее время просмотра">${escapeHtml(timeText)}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  const fallback = 'Guest';
+  safeLocalStorageSet(USERNAME_STORAGE, fallback);
+  safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '0');
+  return fallback;
 }
 
-function startUsersRenderTicker() {
-  if (usersRenderTicker) {
-    clearInterval(usersRenderTicker);
+let username = resolveInitialUsername();
+if (nicknameInput) nicknameInput.value = username;
+
+function getOrCreateUserKey() {
+  let key = safeLocalStorageGet(USER_KEY_STORAGE);
+  if (!key) {
+    key = `uk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    safeLocalStorageSet(USER_KEY_STORAGE, key);
   }
-
-  usersRenderTicker = setInterval(() => {
-    renderUsers();
-  }, 1000);
+  return key;
 }
+const userKey = getOrCreateUserKey();
 
-async function loadWatchOrder(shikimoriId) {
-  if (!shikimoriId) return null;
-
-  try {
-    const response = await fetch(`/api/watch-order?shikimoriId=${encodeURIComponent(shikimoriId)}`);
-    const data = await readJsonSafely(response);
-    if (!response.ok) throw new Error(data?.error || 'Не удалось загрузить порядок просмотра');
-    return data;
-  } catch (error) {
-    console.error('WATCH ORDER FRONT ERROR:', error);
+function getClientCachedSearch(query) {
+  const entry = clientSearchCache.get(query);
+  if (!entry) return null;
+  if (Date.now() - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
+    clientSearchCache.delete(query);
     return null;
   }
+  return entry.data;
 }
 
-function renderWatchOrderBlock(watchOrderData) {
-  if (!watchOrderData?.items?.length) return '';
-
-  const items = watchOrderData.items || [];
-  const mainItems = items.filter(item => (item.group || 'main') === 'main');
-  const extraItems = items.filter(item => item.group === 'extra');
-
-  const renderItems = (list) => list.map(item => `
-    <button
-      type="button"
-      class="watch-order-item ${item.isCurrent ? 'current' : ''}"
-      data-watch-order-item="1"
-      data-shikimori-id="${escapeHtml(item.shikimoriId)}"
-      data-anime-id="${escapeHtml(item.animeId)}"
-      data-anime-url="${escapeHtml(item.animeUrl)}"
-      data-title="${escapeHtml(item.title)}"
-      data-year="${escapeHtml(item.year || '')}"
-    >
-      ${item.poster ? `<img src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.title)}" loading="lazy" class="watch-order-poster" />` : ''}
-      <div class="watch-order-item-content">
-        <div class="watch-order-item-main">
-          <span class="watch-order-item-index">${item.order}.</span>
-          <span class="watch-order-item-title">${escapeHtml(item.title)}</span>
-        </div>
-        <div class="watch-order-item-meta">
-          ${escapeHtml(item.kind)}${item.relationLabel ? `, ${escapeHtml(item.relationLabel)}` : ''}${item.year ? `, ${escapeHtml(item.year)}` : ''}
-        </div>
-      </div>
-    </button>
-  `).join('');
-
-  return `
-    <div class="watch-order-block">
-      <button type="button" class="watch-order-toggle ${watchOrderExpanded ? 'expanded' : ''}" id="watchOrderToggleBtn">
-        <span>Порядок просмотра</span>
-        <span class="watch-order-toggle-arrow">${watchOrderExpanded ? '⌃' : '⌄'}</span>
-      </button>
-
-      <div class="watch-order-list ${watchOrderExpanded ? 'expanded' : 'collapsed'}" id="watchOrderList">
-        ${mainItems.length ? `
-          <div class="watch-order-section">
-            <div class="watch-order-section-title">Основной порядок</div>
-            ${renderItems(mainItems)}
-          </div>
-        ` : ''}
-
-        ${extraItems.length ? `
-          <div class="watch-order-section watch-order-section-extra">
-            <button type="button" class="watch-order-subtoggle ${watchOrderExtrasExpanded ? 'expanded' : ''}" id="watchOrderExtrasToggleBtn">
-              <span>Дополнительно</span>
-              <span class="watch-order-toggle-arrow">${watchOrderExtrasExpanded ? '⌃' : '⌄'}</span>
-            </button>
-
-            <div class="watch-order-extra-list ${watchOrderExtrasExpanded ? 'expanded' : 'collapsed'}" id="watchOrderExtrasList">
-              ${renderItems(extraItems)}
-            </div>
-          </div>
-        ` : ''}
-      </div>
-    </div>
-  `;
+function setClientCachedSearch(query, data) {
+  if (clientSearchCache.size > SEARCH_CLIENT_CACHE_MAX) {
+    const oldestKey = clientSearchCache.keys().next().value;
+    clientSearchCache.delete(oldestKey);
+  }
+  clientSearchCache.set(query, { createdAt: Date.now(), data });
 }
 
-function bindWatchOrderEvents() {
-  const toggleBtn = document.getElementById('watchOrderToggleBtn');
-  const listEl = document.getElementById('watchOrderList');
-
-  if (toggleBtn && listEl) {
-    toggleBtn.addEventListener('click', () => {
-      watchOrderExpanded = !watchOrderExpanded;
-      listEl.classList.toggle('expanded', watchOrderExpanded);
-      listEl.classList.toggle('collapsed', !watchOrderExpanded);
-      toggleBtn.classList.toggle('expanded', watchOrderExpanded);
-
-      const arrow = toggleBtn.querySelector('.watch-order-toggle-arrow');
-      if (arrow) {
-        arrow.textContent = watchOrderExpanded ? '⌃' : '⌄';
-      }
-    });
+function clearSearchResultsUi() {
+  if (animeList) {
+    animeList.innerHTML = '';
+    animeList.classList.remove('visible');
   }
+  lastRenderedSearchSignature = '';
+}
 
-  const extrasToggleBtn = document.getElementById('watchOrderExtrasToggleBtn');
-  const extrasListEl = document.getElementById('watchOrderExtrasList');
+function buildSearchSignature(items, expanded) {
+  const ids = (items || []).map((item) => `${item.animeId || ''}:${item.title || ''}:${item.year || ''}`).join('|');
+  return `${expanded ? '1' : '0'}::${ids}`;
+}
 
-  if (extrasToggleBtn && extrasListEl) {
-    extrasToggleBtn.addEventListener('click', () => {
-      watchOrderExtrasExpanded = !watchOrderExtrasExpanded;
-      extrasListEl.classList.toggle('expanded', watchOrderExtrasExpanded);
-      extrasListEl.classList.toggle('collapsed', !watchOrderExtrasExpanded);
-      extrasToggleBtn.classList.toggle('expanded', watchOrderExtrasExpanded);
-
-      const arrow = extrasToggleBtn.querySelector('.watch-order-toggle-arrow');
-      if (arrow) {
-        arrow.textContent = watchOrderExtrasExpanded ? '⌃' : '⌄';
-      }
-    });
-  }
-
-  document.querySelectorAll('[data-watch-order-item="1"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (!canControl()) return;
-
-      const item = {
-        animeId: btn.dataset.animeId,
-        animeUrl: btn.dataset.animeUrl,
-        title: btn.dataset.title,
-        year: btn.dataset.year || '',
-        shikimoriId: Number(btn.dataset.shikimoriId) || null,
-        kodikId: null
-      };
-
-      await selectAnime(item);
-    });
+function sortSearchResults(items) {
+  return [...(items || [])].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const yearA = Number(a?.year) || 0;
+    const yearB = Number(b?.year) || 0;
+    if (yearA !== yearB) return yearB - yearA;
+    return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
   });
 }
 
-async function renderSelectedAnimeInfo(anime) {
-  if (!selectedAnimeInfo) return;
-
-  updateSelectedAnimeInfoContent(anime);
-
-  const watchOrderBlockHtml = anime?.shikimoriId
-    ? renderWatchOrderBlock(await loadWatchOrder(anime.shikimoriId))
-    : '';
-
-  if (selectedAnimeInfo.querySelector('.selected-anime-body')) {
-    selectedAnimeInfo.querySelector('.selected-anime-body').insertAdjacentHTML('beforeend', watchOrderBlockHtml);
-  }
-
-  bindWatchOrderEvents();
-}
-
-
 function renderAnimeResults(items) {
   if (!animeList) return;
-
   if (!items.length) {
     clearSearchResultsUi();
     return;
@@ -1031,19 +467,12 @@ function renderAnimeResults(items) {
 
   const visibleItems = showAllSearchResults ? items : items.slice(0, 5);
   const needToggle = items.length > 5;
-
   const nextSignature = buildSearchSignature(items, showAllSearchResults);
-  if (lastRenderedSearchSignature === nextSignature) {
-    return;
-  }
+  if (lastRenderedSearchSignature === nextSignature) return;
 
   animeList.innerHTML = `
-    ${visibleItems.map(item => `
-      <button
-        type="button"
-        class="search-result-item ${item.animeId === selectedAnime?.animeId ? 'active' : ''}"
-        data-anime-id="${escapeHtml(item.animeId)}"
-      >
+    ${visibleItems.map((item) => `
+      <button type="button" class="search-result-item" data-anime-id="${escapeHtml(item.animeId)}">
         ${item.poster ? `<img class="search-result-poster" src="${escapeHtml(item.poster)}" loading="lazy" alt="${escapeHtml(item.title)}">` : '<div class="search-result-poster search-result-poster-empty"></div>'}
         <div class="search-result-content">
           <div class="search-result-title">${escapeHtml(item.title)}</div>
@@ -1051,25 +480,19 @@ function renderAnimeResults(items) {
         </div>
       </button>
     `).join('')}
-
-    ${needToggle ? `
-      <button type="button" class="search-results-toggle" id="searchResultsToggleBtn">
-        ${showAllSearchResults ? 'СВЕРНУТЬ РЕЗУЛЬТАТЫ' : 'ОТКРЫТЬ ВСЕ РЕЗУЛЬТАТЫ'}
-      </button>
-    ` : ''}
+    ${needToggle ? `<button type="button" class="search-results-toggle" id="searchResultsToggleBtn">${showAllSearchResults ? 'СВЕРНУТЬ РЕЗУЛЬТАТЫ' : 'ОТКРЫТЬ ВСЕ РЕЗУЛЬТАТЫ'}</button>` : ''}
   `;
 
   animeList.classList.add('visible');
   lastRenderedSearchSignature = nextSignature;
 
-  animeList.querySelectorAll('.search-result-item').forEach(btn => {
+  animeList.querySelectorAll('.search-result-item').forEach((btn) => {
     btn.disabled = !canControl();
     btn.addEventListener('click', async () => {
-      const selectedItemFromResults = items.find(item => item.animeId === btn.dataset.animeId);
-      if (!selectedItemFromResults) return;
-
+      const picked = items.find((i) => i.animeId === btn.dataset.animeId);
+      if (!picked) return;
       clearSearchResultsUi();
-      await selectAnime(selectedItemFromResults);
+      await selectAnime(picked);
     });
   });
 
@@ -1084,234 +507,15 @@ function renderAnimeResults(items) {
   }
 }
 
-function toggleOverlayDropdown(dropdownElement, isOpenState, menuElement) {
-  if (!dropdownElement || !menuElement) return;
-
-  isOpenState = !isOpenState;
-  dropdownElement.classList.toggle('open', isOpenState);
-
-  // Close other dropdowns if this one is opening
-  if (isOpenState) {
-    if (dropdownElement !== overlayPlayerDropdown) overlayPlayerDropdown?.classList.remove('open');
-    if (dropdownElement !== overlaySeasonDropdown) overlaySeasonDropdown?.classList.remove('open');
-    if (dropdownElement !== overlayEpisodeDropdown) overlayEpisodeDropdown?.classList.remove('open');
-  }
-
-  return isOpenState;
-}
-
-function hideOverlayMenus() {
-  isOverlayPlayerOpen = false;
-  isOverlaySeasonOpen = false;
-  isOverlayEpisodeOpen = false;
-
-  overlayPlayerDropdown?.classList.remove('open');
-  overlaySeasonDropdown?.classList.remove('open');
-  overlayEpisodeDropdown?.classList.remove('open');
-}
-
-function hideOverlay() {
-  hideOverlayMenus();
-  playerTopOverlay?.classList.add('hidden');
-}
-
-function showOverlay() {
-  if (!playerTopOverlay) return;
-  playerTopOverlay.classList.remove('hidden');
-}
-
-function renderOverlayControls() {
-  if (!selectedAnime) {
-    hideOverlay();
-    return;
-  }
-
-  const videos = selectedAnime.videos || [];
-  const players = getUniquePlayers(videos);
-
-  if (!selectedPlayer && players.length) {
-    selectedPlayer = players[0].name;
-  }
-
-  const byPlayer = getVideosBySelectedPlayer(videos);
-  const seasons = getUniqueSeasons(byPlayer);
-
-  if (!selectedSeason) {
-    selectedSeason = seasons[0]?.season || 1;
-  }
-
-  if (!seasons.find(s => s.season === selectedSeason)) {
-    selectedSeason = seasons[0]?.season || 1; // Fallback to first season if current selected is not available
-  }
-
-  const bySeason = getVideosBySelectedSeason(byPlayer);
-  const episodes = getUniqueEpisodes(bySeason);
-
-  if (overlayPlayerBtnText) {
-    overlayPlayerBtnText.textContent = selectedPlayer || 'Озвучка';
-  }
-
-  if (overlaySeasonBtnText) {
-    overlaySeasonBtnText.textContent = `${selectedSeason || 1} сезон`;
-  }
-
-  if (overlayEpisodeBtnText) {
-    overlayEpisodeBtnText.textContent = `${currentState.episodeNumber || episodes[0]?.episodeNumber || 1} серия`;
-  }
-
-  overlayPlayerMenu.innerHTML = players.map(player => `
-    <button
-      type="button"
-      class="overlay-dropdown-item ${player.name === selectedPlayer ? 'active' : ''}"
-      data-player="${escapeHtml(player.name)}"
-    >
-      <span>${escapeHtml(player.name)}</span>
-      <span class="overlay-item-count">${player.count}</span>
-    </button>
-  `).join('');
-
-  overlaySeasonMenu.innerHTML = seasons.map(season => `
-    <button
-      type="button"
-      class="overlay-dropdown-item ${season.season === selectedSeason ? 'active' : ''}"
-      data-season="${season.season}"
-    >
-      <span>${season.season} сезон</span>
-      <span class="overlay-item-count">${season.count}</span>
-    </button>
-  `).join('');
-
-  overlayEpisodeMenu.innerHTML = episodes.map(episode => `
-    <button
-      type="button"
-      class="overlay-dropdown-item overlay-dropdown-item-episode ${episode.episodeNumber === currentState.episodeNumber ? 'active' : ''}"
-      data-episode="${episode.episodeNumber}"
-      title="Серия ${episode.episodeNumber}"
-    >
-      ${episode.episodeNumber}
-    </button>
-  `).join('');
-
-  overlaySeasonDropdown.style.display = seasons.length > 1 ? '' : 'none';
-
-  overlayPlayerDropdown?.classList.toggle('open', isOverlayPlayerOpen);
-  overlaySeasonDropdown?.classList.toggle('open', isOverlaySeasonOpen);
-  overlayEpisodeDropdown?.classList.toggle('open', isOverlayEpisodeOpen);
-
-  overlayPlayerMenu.querySelectorAll('[data-player]').forEach(btn => {
-    btn.disabled = !canControl();
-    btn.addEventListener('click', () => {
-      selectedPlayer = btn.dataset.player;
-      selectedSeason = null;
-      isOverlayPlayerOpen = false;
-
-      const refreshedByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
-      const seasonsAfterPlayerChange = getUniqueSeasons(refreshedByPlayer);
-      selectedSeason = seasonsAfterPlayerChange[0]?.season || 1;
-
-      renderOverlayControls();
-
-      const refreshedBySeason = getVideosBySelectedSeason(refreshedByPlayer);
-      const firstEpisode = getUniqueEpisodes(refreshedBySeason)[0];
-      if (firstEpisode) {
-        launchEpisode(firstEpisode, selectedAnime);
-      }
-    });
-  });
-
-  overlaySeasonMenu.querySelectorAll('[data-season]').forEach(btn => {
-    btn.disabled = !canControl();
-    btn.addEventListener('click', () => {
-      selectedSeason = Number(btn.dataset.season) || 1;
-      isOverlaySeasonOpen = false;
-      renderOverlayControls();
-
-      const refreshedByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
-      const refreshedBySeason = getVideosBySelectedSeason(refreshedByPlayer);
-      const firstEpisode = getUniqueEpisodes(refreshedBySeason)[0];
-      if (firstEpisode) {
-        launchEpisode(firstEpisode, selectedAnime);
-      }
-    });
-  });
-
-  overlayEpisodeMenu.querySelectorAll('[data-episode]').forEach(btn => {
-    btn.disabled = !canControl();
-    btn.addEventListener('click', () => {
-      const episodeNumber = Number(btn.dataset.episode);
-      const refreshedByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
-      const refreshedBySeason = getVideosBySelectedSeason(refreshedByPlayer);
-      const episode = getUniqueEpisodes(refreshedBySeason).find(v => v.episodeNumber === episodeNumber);
-      if (!episode) return;
-
-      isOverlayEpisodeOpen = false;
-      renderOverlayControls();
-      launchEpisode(episode, selectedAnime);
-    });
-  });
-
-  showOverlay();
-  updateControlState();
-}
-
-function launchEpisode(episode, anime) {
-  if (!episode) return;
-
-  const embedUrl = getIframeUrl(episode);
-  const season = getSeasonNumber(episode);
-  const episodeNumber = getEpisodeNumber(episode);
-  const playerName = getPlayerName(episode);
-  const title = `${anime?.title || 'Аниме'} — ${playerName}, сезон ${season}, серия ${episodeNumber}`;
-
-  currentState = {
-    animeId: anime?.animeId ?? null,
-    animeUrl: anime?.animeUrl ?? null,
-    episodeNumber,
-    embedUrl,
-    title,
-    duration: 0,
-    playback: {
-      paused: true,
-      currentTime: 0,
-      updatedAt: Date.now()
-    }
-  };
-
-  selectedSeason = season;
-  selectedPlayer = playerName;
-  hasShownFirstEpisodeHint = false;
-
-  userInteractedWithPlayer = true;
-  loadIframe(embedUrl);
-  renderOverlayControls();
-
-  if (roomId !== 'solo') {
-    socket.emit('change-video', {
-      roomId,
-      embedUrl,
-      title,
-      animeId: currentState.animeId,
-      animeUrl: currentState.animeUrl,
-      episodeNumber
-    });
-  } else {
-    sys(`Вы выбрали: ${title}`);
-  }
-}
-
 async function fetchSearchResults(rawQuery, token) {
   const normalizedQuery = normalizeSearchQuery(rawQuery);
-
   const cached = getClientCachedSearch(normalizedQuery);
+
   if (cached) {
     if (token !== latestSearchToken) return;
     lastSearchResults = cached;
     renderAnimeResults(lastSearchResults);
-    if (searchStatus) {
-      searchStatus.textContent = lastSearchResults.length
-        ? `Найдено: ${lastSearchResults.length}`
-        : 'Ничего не найдено';
-    }
+    if (searchStatus) searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
     return;
   }
 
@@ -1321,15 +525,12 @@ async function fetchSearchResults(rawQuery, token) {
 
   activeSearchAbortController = new AbortController();
 
-  const response = await fetch(`/api/yummy/search?q=${encodeURIComponent(rawQuery)}`, {
+  const response = await fetch(`/api/kodik/search?q=${encodeURIComponent(rawQuery)}`, {
     signal: activeSearchAbortController.signal,
-    headers: {
-      'Accept': 'application/json'
-    }
+    headers: { Accept: 'application/json' }
   });
 
   const data = await readJsonSafely(response);
-
   if (token !== latestSearchToken) return;
   if (!response.ok) throw new Error(data?.error || 'Ошибка поиска');
 
@@ -1340,9 +541,7 @@ async function fetchSearchResults(rawQuery, token) {
   renderAnimeResults(lastSearchResults);
 
   if (searchStatus) {
-    searchStatus.textContent = lastSearchResults.length
-      ? `Найдено: ${lastSearchResults.length}`
-      : 'Ничего не найдено';
+    searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
   }
 }
 
@@ -1352,16 +551,13 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
 
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) {
     latestSearchToken += 1;
-
     if (activeSearchAbortController) {
       activeSearchAbortController.abort();
       activeSearchAbortController = null;
     }
-
     lastSearchResults = [];
     showAllSearchResults = false;
     clearSearchResultsUi();
-
     if (searchStatus) searchStatus.textContent = 'Введите минимум 2 символа';
     return;
   }
@@ -1371,7 +567,6 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
   latestSearchToken += 1;
   const token = latestSearchToken;
   showAllSearchResults = false;
-
   if (searchStatus) searchStatus.textContent = 'Поиск...';
 
   try {
@@ -1379,24 +574,21 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
   } catch (error) {
     if (token !== latestSearchToken) return;
     if (error?.name === 'AbortError') return;
-
     if (searchStatus) searchStatus.textContent = error.message || 'Ошибка поиска';
     clearSearchResultsUi();
   }
 }, SEARCH_DEBOUNCE_MS);
 
-
 async function selectAnime(item) {
   if (!item || !canControl()) return;
-
   if (selectedAnimeInfo) selectedAnimeInfo.innerHTML = 'Загрузка...';
 
   try {
-    const response = await fetch('/api/yummy/anime/by-selection', {
+    const response = await fetch('/api/kodik/anime/by-selection', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        Accept: 'application/json'
       },
       body: JSON.stringify({
         animeUrl: item.animeUrl,
@@ -1412,44 +604,112 @@ async function selectAnime(item) {
 
     if (!response.ok) {
       if (response.status === 403 && data?.code === 'ANIME_BLOCKED_BY_COUNTRY') {
-        showBlockedAnimeMessage(data?.error || 'Данное аниме запрещено на территории вашей страны');
+        selectedAnime = null;
+        updateSelectedAnimeInfoContent(null);
+        showPlaceholderUi('Просмотр недоступен', data?.error || 'Данное аниме запрещено на территории вашей страны');
         return;
       }
-
       throw new Error(data?.error || 'Не удалось загрузить аниме');
     }
 
     selectedAnime = {
       ...data,
-      shikimoriId: item.shikimoriId || data.shikimoriId || null,
       videos: Array.isArray(data?.videos) ? data.videos : []
     };
 
-    const context = findDefaultContext(selectedAnime.videos);
+    updateSelectedAnimeInfoContent(selectedAnime);
 
-    if (!context) {
-      await renderSelectedAnimeInfo(selectedAnime);
-      showPlaceholderUi('Нет доступных серий', 'Для выбранного тайтла не удалось найти рабочий плеер');
+    const firstVideo = selectedAnime.videos.find((v) => v?.iframeUrl || v?.iframe_url);
+    if (!firstVideo) {
+      showPlaceholderUi('Нет доступных серий', 'Не удалось найти рабочий iframe для выбранного тайтла');
       return;
     }
 
-    selectedPlayer = context.player;
-    selectedSeason = context.season;
+    const embedUrl = firstVideo.iframeUrl || firstVideo.iframe_url;
+    const episodeNumber = Number(firstVideo.number) || Number(firstVideo.index) || 1;
+    const title = `${selectedAnime.title} — серия ${episodeNumber}`;
 
-    await renderSelectedAnimeInfo(selectedAnime);
-    renderOverlayControls();
-    launchEpisode(context.episode, selectedAnime);
+    currentState = {
+      animeId: selectedAnime.animeId || null,
+      animeUrl: selectedAnime.animeUrl || null,
+      episodeNumber,
+      embedUrl,
+      title,
+      duration: 0,
+      playback: {
+        paused: true,
+        currentTime: 0,
+        updatedAt: Date.now()
+      }
+    };
+
+    loadIframe(embedUrl);
+
+    if (roomId !== 'solo') {
+      socket.emit('change-video', {
+        roomId,
+        embedUrl,
+        title,
+        animeId: currentState.animeId,
+        animeUrl: currentState.animeUrl,
+        episodeNumber: currentState.episodeNumber
+      });
+    } else {
+      sys(`Вы выбрали: ${title}`);
+    }
   } catch (error) {
-    console.error('Ошибка при выборе аниме:', error);
     updateSelectedAnimeInfoContent(null);
     showPlaceholderUi('Ошибка', error.message || 'Не удалось загрузить аниме');
-    hideOverlay();
   }
+}
+
+function getDisplayedUserTime(user) {
+  const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
+  if (!hasTime) return null;
+  const baseTime = Number(user.currentTime) || 0;
+  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
+  if (!updatedAt) return baseTime;
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+  return baseTime + diffSeconds;
+}
+
+function renderUsers(users) {
+  if (!usersList) return;
+
+  if (Array.isArray(users)) {
+    latestRoomUsers = users.map((user) => ({ ...user }));
+  }
+
+  if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
+    usersList.innerHTML = `<div class="empty-state">Пока никого нет</div>`;
+    return;
+  }
+
+  usersList.innerHTML = latestRoomUsers.map((user) => {
+    const displayTime = getDisplayedUserTime(user);
+    const timeText = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '--:--';
+
+    return `
+      <div class="user-item">
+        <div class="user-main">
+          <div class="user-identity">
+            <span class="user-name">${escapeHtml(user.username)}</span>
+            ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
+          </div>
+          <div class="user-time">${escapeHtml(timeText)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function startUsersRenderTicker() {
+  if (usersRenderTicker) clearInterval(usersRenderTicker);
+  usersRenderTicker = setInterval(() => renderUsers(), 1000);
 }
 
 function saveNickname() {
   const newUsername = sanitizeUsername(nicknameInput?.value);
-
   if (!newUsername) {
     alert('Введите ник');
     nicknameInput?.focus();
@@ -1461,9 +721,7 @@ function saveNickname() {
   safeLocalStorageSet(USERNAME_STORAGE, username);
   safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '1');
 
-  if (nicknameInput) {
-    nicknameInput.value = username;
-  }
+  if (nicknameInput) nicknameInput.value = username;
 
   if (roomId !== 'solo') {
     socket.emit('change-username', { roomId, username });
@@ -1472,93 +730,6 @@ function saveNickname() {
   }
 }
 
-window.addEventListener('pointerdown', () => {
-  userInteractedWithPlayer = true;
-  hideViewerHintOverlay();
-  unlockAudioContext();
-});
-
-window.addEventListener('keydown', () => {
-  userInteractedWithPlayer = true;
-  hideViewerHintOverlay();
-  unlockAudioContext();
-});
-
-document.addEventListener('click', (event) => {
-  const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
-  if (!withinSearch) {
-    animeList?.classList.remove('visible');
-  }
-
-  const withinOverlay = event.target.closest('.player-top-overlay');
-  if (!withinOverlay) {
-    hideOverlayMenus();
-  }
-});
-
-overlayPlayerBtn?.addEventListener('click', (event) => {
-  event.stopPropagation();
-  if (!canControl()) return;
-  isOverlayPlayerOpen = toggleOverlayDropdown(overlayPlayerDropdown, isOverlayPlayerOpen, overlayPlayerMenu);
-  if (!isOverlayPlayerOpen) hideOverlayMenus(); // If this one closed, close others
-  renderOverlayControls();
-});
-
-overlaySeasonBtn?.addEventListener('click', (event) => {
-  event.stopPropagation();
-  if (!canControl()) return;
-  isOverlaySeasonOpen = toggleOverlayDropdown(overlaySeasonDropdown, isOverlaySeasonOpen, overlaySeasonMenu);
-  if (!isOverlaySeasonOpen) hideOverlayMenus(); // If this one closed, close others
-  renderOverlayControls();
-});
-
-overlayEpisodeBtn?.addEventListener('click', (event) => {
-  event.stopPropagation();
-  if (!canControl()) return;
-  isOverlayEpisodeOpen = toggleOverlayDropdown(overlayEpisodeDropdown, isOverlayEpisodeOpen, overlayEpisodeMenu);
-  if (!isOverlayEpisodeOpen) hideOverlayMenus(); // If this one closed, close others
-  renderOverlayControls();
-});
-
-
-window.addEventListener('message', (event) => {
-  // Use PlayerModule's event handling for Kodik messages
-  // The PlayerModule will dispatch custom events like 'player:kodik:time-update'
-  // Or handle them internally and update state via callbacks
-  if (event.data?.type === 'kodik:api:public' && event.data?.event === 'player:time-update') {
-    const seconds = typeof event.data.payload === 'number' ? event.data.payload : Number(event.data.payload);
-    if (!Number.isNaN(seconds) && seconds >= 0) {
-      currentState.playback.currentTime = seconds;
-      currentState.playback.updatedAt = Date.now();
-
-      if (isHost) {
-        lastKnownHostTime = seconds;
-        lastKnownHostTimeAt = Date.now();
-      }
-    }
-    console.debug('Kodik time update:', seconds);
-  } else if (event.data?.type === 'kodik:api:public' && event.data?.event === 'player:duration-update') {
-    currentState.duration = Number(event.data.payload) || 0;
-    console.debug('Kodik duration update:', currentState.duration);
-  }
-});
-
-
-// Callbacks from PlayerModule
-window.PlayerModule.onVideoChanged((payload) => {
-  console.debug('PlayerModule video changed:', payload);
-  // This might be for internal player episode/translation changes, handle if necessary
-});
-
-window.PlayerModule.onEpisodeEnded(() => {
-  console.debug('PlayerModule episode ended.');
-  // Handle episode ended event, e.g., auto-play next episode for host
-  if (isHost || roomId === 'solo') {
-    // Logic for playing next episode (if available)
-  }
-});
-
-
 socket.on('connect', () => {
   if (roomId !== 'solo') {
     socket.emit('join-room', { roomId, username, userKey, accessToken: roomAccessToken });
@@ -1566,7 +737,7 @@ socket.on('connect', () => {
     isHost = true;
     updateControlState();
     updateSelectedAnimeInfoContent(selectedAnime);
-    showPlaceholderUi(currentState.title, isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
+    showPlaceholderUi('Ничего не выбрано', 'Выберите аниме');
   }
 });
 
@@ -1575,23 +746,9 @@ socket.on('join-error', ({ message }) => {
   window.location.href = '/';
 });
 
-socket.on('disconnect', () => {
-  stopHostTimers();
-  stopUserTimeTimer();
-  stopHostPlaybackGuard();
-  stopPlaybackDriftCheck();
-});
-
 socket.on('you-are-host', () => {
   isHost = true;
   updateControlState();
-  stopPlaybackDriftCheck();
-
-  if (currentState.embedUrl) {
-    startHostTimers();
-    startHostPlaybackGuard();
-  }
-
   if (!hasShownHostMessage) {
     sys('Вы хост комнаты');
     hasShownHostMessage = true;
@@ -1599,67 +756,35 @@ socket.on('you-are-host', () => {
 });
 
 socket.on('sync-state', (state) => {
-  isHost = !!state.isHost;
+  isHost = !!state?.isHost;
   updateControlState();
 
-  if (!isHost) {
-    stopHostPlaybackGuard();
-  } else if (currentState.embedUrl) {
-    startHostPlaybackGuard();
-  }
-
   currentState = {
-    animeId: state.animeId ?? null,
-    animeUrl: state.animeUrl ?? null,
-    episodeNumber: state.episodeNumber ?? null,
-    embedUrl: state.embedUrl ?? null,
-    title: state.title ?? null,
-    duration: currentState.duration || 0,
-    playback: state.playback || {
-      paused: true,
-      currentTime: 0,
-      updatedAt: 0
-    }
+    animeId: state?.animeId ?? null,
+    animeUrl: state?.animeUrl ?? null,
+    episodeNumber: state?.episodeNumber ?? null,
+    embedUrl: state?.embedUrl ?? null,
+    title: state?.title ?? null,
+    duration: 0,
+    playback: state?.playback || { paused: true, currentTime: 0, updatedAt: Date.now() }
   };
 
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
     pendingPlaybackApply = currentState.playback;
-    // applyPlaybackStateWhenReady moved to PlayerModule in previous steps
-    // window.PlayerModule.applyPlaybackStateWhenReady(currentState.playback, 12);
+    setTimeout(() => applyPlaybackStateWhenReady(pendingPlaybackApply), 450);
   } else {
     showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
   }
-
-  // Restore previous selectedAnime for overlay controls (if available from selectedAnime itself)
-  // This needs to be handled on the server side to send `selectedAnime` object to all users.
-  // For now, let's assume selectedAnime can be inferred from currentState title/shikimoriId etc.
-  // Or if selectedAnime is null, clear the controls.
-  if (currentState.animeId && currentState.title) {
-    selectedAnime = {
-      animeId: currentState.animeId,
-      animeUrl: currentState.animeUrl,
-      title: currentState.title,
-      // You might need to fetch full anime data here or store it in socket state
-      videos: selectedAnime?.videos || [], // Keep old videos if not reset
-    };
-    renderOverlayControls();
-    renderSelectedAnimeInfo(selectedAnime);
-  } else {
-    selectedAnime = null;
-    hideOverlay();
-    updateSelectedAnimeInfoContent(null);
-  }
-
 });
 
 socket.on('video-changed', (state) => {
   currentState = {
-    animeId: state.animeId ?? null,
-    animeUrl: state.animeUrl ?? null,
-    episodeNumber: state.episodeNumber ?? null,
-    embedUrl: state.embedUrl ?? null,
-    title: state.title ?? null,
+    animeId: state?.animeId ?? null,
+    animeUrl: state?.animeUrl ?? null,
+    episodeNumber: state?.episodeNumber ?? null,
+    embedUrl: state?.embedUrl ?? null,
+    title: state?.title ?? null,
     duration: 0,
     playback: {
       paused: true,
@@ -1668,27 +793,8 @@ socket.on('video-changed', (state) => {
     }
   };
 
-  // Restore previous selectedAnime for overlay controls
-  if (currentState.animeId && currentState.title) {
-    selectedAnime = {
-      animeId: currentState.animeId,
-      animeUrl: currentState.animeUrl,
-      title: currentState.title,
-      // You might need to fetch full anime data here or store it in socket state
-      videos: selectedAnime?.videos || [], // Keep old videos if not reset
-    };
-    renderOverlayControls();
-    renderSelectedAnimeInfo(selectedAnime);
-  } else {
-    selectedAnime = null;
-    hideOverlay();
-    updateSelectedAnimeInfoContent(null);
-  }
-
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
-    pendingPlaybackApply = currentState.playback;
-    // window.PlayerModule.applyPlaybackStateWhenReady(currentState.playback, 12);
   } else {
     showPlaceholderUi('Ничего не выбрано', 'Хост пока не запустил тайтл');
   }
@@ -1707,8 +813,7 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
     updatedAt: Number(updatedAt || Date.now()) || Date.now()
   };
 
-  // Assuming PlayerModule handles applying state
-  // window.PlayerModule.applyPlaybackStateWhenReady(currentState.playback, 12);
+  applyPlaybackStateWhenReady(currentState.playback);
 });
 
 socket.on('room-users', renderUsers);
@@ -1716,37 +821,31 @@ socket.on('system-message', ({ text }) => sys(text));
 
 socket.on('chat-message', ({ username: author, message, time }) => {
   if (!chatMessages || !window.ChatModule) return;
-
   const isSelfMessage = author === username;
 
-  ChatModule.appendMessage(chatMessages, {
+  window.ChatModule.appendMessage(chatMessages, {
     username: author,
     message,
     time,
     isSelf: isSelfMessage
   });
 
-  if (!isSelfMessage) {
-    playChatSound();
-  }
+  if (!isSelfMessage) playChatSound();
 });
 
+window.PlayerModule.onVideoChanged?.(() => {});
+window.PlayerModule.onEpisodeEnded?.(() => {});
+
 if (searchInput) {
-  searchInput.addEventListener('input', () => {
-    debouncedSearchAnime(searchInput.value);
-  });
-
+  searchInput.addEventListener('input', () => debouncedSearchAnime(searchInput.value));
   searchInput.addEventListener('focus', () => {
-    if (lastSearchResults.length) {
-      renderAnimeResults(lastSearchResults);
-    }
+    if (lastSearchResults.length) renderAnimeResults(lastSearchResults);
   });
-
   searchInput.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       clearSearchResultsUi();
       searchInput.blur();
-      debouncedSearchAnime.cancel(); // Cancel any pending search
+      debouncedSearchAnime.cancel?.();
     }
   });
 }
@@ -1754,9 +853,7 @@ if (searchInput) {
 if (copyLinkBtn) {
   copyLinkBtn.addEventListener('click', async () => {
     const inviteParams = new URLSearchParams();
-    if (roomAccessToken) {
-      inviteParams.set('access', roomAccessToken);
-    }
+    if (roomAccessToken) inviteParams.set('access', roomAccessToken);
 
     const inviteQuery = inviteParams.toString();
     const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}${inviteQuery ? `?${inviteQuery}` : ''}`;
@@ -1771,15 +868,10 @@ if (copyLinkBtn) {
 }
 
 if (cinemaModeBtn) {
-  cinemaModeBtn.addEventListener('click', () => {
-    roomPage?.classList.toggle('cinema-mode');
-  });
+  cinemaModeBtn.addEventListener('click', () => roomPage?.classList.toggle('cinema-mode'));
 }
 
-if (supportRoomBtn) {
-  supportRoomBtn.addEventListener('click', openRoomSupportModal);
-}
-
+if (supportRoomBtn) supportRoomBtn.addEventListener('click', openRoomSupportModal);
 roomSupportModalBackdrop?.addEventListener('click', closeRoomSupportModal);
 closeRoomSupportModalBtn?.addEventListener('click', closeRoomSupportModal);
 
@@ -1789,10 +881,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-if (saveNicknameBtn) {
-  saveNicknameBtn.addEventListener('click', saveNickname);
-}
-
+if (saveNicknameBtn) saveNicknameBtn.addEventListener('click', saveNickname);
 if (nicknameInput) {
   nicknameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') saveNickname();
@@ -1805,17 +894,17 @@ if (sendBtn && chatInput) {
     if (!message) return;
 
     unlockAudioContext();
-    playChatSound();
 
     if (roomId !== 'solo') {
       socket.emit('chat-message', { roomId, username, message });
     } else if (window.ChatModule && chatMessages) {
-      ChatModule.appendMessage(chatMessages, {
+      window.ChatModule.appendMessage(chatMessages, {
         username,
         message,
         time: getMoscowTimeString(),
         isSelf: true
       });
+      playChatSound();
     }
 
     chatInput.value = '';
@@ -1827,25 +916,16 @@ if (sendBtn && chatInput) {
   });
 }
 
+window.addEventListener('pointerdown', () => unlockAudioContext());
+window.addEventListener('keydown', () => unlockAudioContext());
+
 window.addEventListener('beforeunload', () => {
-  stopHostTimers();
-  stopUserTimeTimer();
-  stopHostPlaybackGuard();
-  stopPlaybackDriftCheck();
-
-  if (usersRenderTicker) {
-    clearInterval(usersRenderTicker);
-    usersRenderTicker = null;
-  }
-
-  if (activeSearchAbortController) {
-    activeSearchAbortController.abort();
-    activeSearchAbortController = null;
-  }
+  if (usersRenderTicker) clearInterval(usersRenderTicker);
+  if (activeSearchAbortController) activeSearchAbortController.abort();
 });
 
 updateControlState();
 updateSelectedAnimeInfoContent(null);
-showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
+showPlaceholderUi('Ничего не выбрано', 'Выберите аниме');
 renderUsers([]);
 startUsersRenderTicker();

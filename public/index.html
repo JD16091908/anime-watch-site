@@ -46,6 +46,7 @@
         </a>
       </div>
     </header>
+
     <main class="main-hero">
       <section class="main-card reveal reveal-2" aria-labelledby="homeMainTitle">
         <div class="main-card-top">
@@ -60,8 +61,10 @@
             </p>
           </div>
         </div>
+
         <section class="main-form reveal reveal-3" aria-labelledby="homeActionsTitle">
           <h2 id="homeActionsTitle" class="hidden">Создание комнаты</h2>
+
           <div class="form-group">
             <label for="username">Ваш ник</label>
             <input
@@ -73,6 +76,7 @@
               spellcheck="false"
             />
           </div>
+
           <div class="main-actions">
             <button id="createRoomBtn" class="btn btn-primary" type="button">
               Создать комнату
@@ -81,11 +85,13 @@
               Одиночный просмотр
             </button>
           </div>
+
           <div class="join-hint">
             <span class="join-hint-icon" aria-hidden="true">🔗</span>
-            <span>Чтобы войти в чужую комнату — попроси друга прислать ссылку-приглашение</span>
+            <span>Чтобы войти в чужую комнату, переходите только по прямой ссылке-приглашению</span>
           </div>
         </section>
+
         <section class="home-info-grid reveal reveal-4" aria-labelledby="homeFeaturesTitle">
           <h2 id="homeFeaturesTitle" class="hidden">Возможности сервиса</h2>
           <article class="home-info-card">
@@ -119,6 +125,7 @@
       </section>
     </main>
   </div>
+
   <nav class="floating-menu" aria-label="Меню сайта">
     <button id="aboutServiceBtn" class="about-service-btn" type="button" aria-haspopup="dialog" aria-controls="aboutModal">
       <span class="about-service-icon" aria-hidden="true">i</span>
@@ -133,6 +140,7 @@
       <span>Спасибо за поддержку</span>
     </a>
   </nav>
+
   <div id="aboutModal" class="about-modal hidden" aria-hidden="true">
     <div class="about-modal-backdrop" id="aboutModalBackdrop"></div>
     <div class="about-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
@@ -146,22 +154,20 @@
           <h2 id="aboutModalTitle">О сервисе</h2>
           <div class="about-modal-card">
             <strong>Anivmeste</strong> — это сервис для совместного и одиночного просмотра аниме.
-            Он помогает быстро создать комнату, пригласить друзей по ссылке и смотреть выбранный тайтл вместе,
-            оставаясь на одной серии и в одном моменте просмотра.
+            Он помогает быстро создать комнату, пригласить друзей по ссылке и смотреть выбранный тайтл вместе.
           </div>
         </section>
         <section class="about-modal-section">
           <h2>Как работает сервис</h2>
           <div class="about-modal-card">
-            Сервис использует только общедоступные источники информации и не хранит собственные копии видеоконтента.
-            Весь доступный контент и связанные с ним данные предоставляются исключительно в ознакомительных целях.
+            Сервис использует только общедоступные источники и не хранит собственные копии видеоконтента.
           </div>
         </section>
         <section class="about-modal-section">
           <h2>Важно</h2>
           <div class="about-modal-card">
             Все видео на сайте предоставлены только для ознакомления.
-            Если вы являетесь правообладателем и у вас есть вопросы по работе сервиса, свяжитесь с нами.
+            Если вы являетесь правообладателем, свяжитесь с нами.
           </div>
         </section>
         <section class="about-modal-section">
@@ -176,6 +182,7 @@
       </div>
     </div>
   </div>
+
   <div id="supportModal" class="about-modal hidden" aria-hidden="true">
     <div class="about-modal-backdrop" id="supportModalBackdrop"></div>
     <div class="about-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="supportModalTitle">
@@ -192,13 +199,7 @@
         <section class="about-modal-section">
           <h2>Способы поддержки</h2>
           <div class="support-grid">
-            <a
-              class="support-card support-card-boosty"
-              id="supportBoostyLink"
-              href="#"
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            >
+            <a class="support-card support-card-boosty" id="supportBoostyLink" href="#" target="_blank" rel="noopener noreferrer nofollow">
               <div class="support-card-head">
                 <div class="support-card-icon">B</div>
                 <div class="support-card-title-wrap">
@@ -208,13 +209,7 @@
               </div>
               <div class="support-card-action">Открыть Boosty</div>
             </a>
-            <a
-              class="support-card support-card-da"
-              id="supportDonationAlertsLink"
-              href="#"
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            >
+            <a class="support-card support-card-da" id="supportDonationAlertsLink" href="#" target="_blank" rel="noopener noreferrer nofollow">
               <div class="support-card-head">
                 <div class="support-card-icon">₽</div>
                 <div class="support-card-title-wrap">
@@ -237,6 +232,7 @@
       </div>
     </div>
   </div>
+
   <script src="/config.js"></script>
   <script src="/main.js"></script>
 </body>
