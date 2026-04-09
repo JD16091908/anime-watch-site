@@ -1,7 +1,5 @@
 const USERNAME_STORAGE = 'username';
 
-const CONFIG = window.AnivmesteConfig || {};
-
 function safeLocalStorageGet(key) {
   try {
     return localStorage.getItem(key);
@@ -56,15 +54,9 @@ function redirectToRoom(roomId, username, accessToken = '') {
 function removeLegacyJoinControls() {
   const legacyJoinBtn = document.getElementById('joinRoomBtn');
   const legacyRoomInput = document.getElementById('roomId');
-
-  if (legacyJoinBtn) {
-    legacyJoinBtn.remove();
-  }
-
+  if (legacyJoinBtn) legacyJoinBtn.remove();
   if (legacyRoomInput) {
-    const wrapper =
-      legacyRoomInput.closest('.form-group') ||
-      legacyRoomInput.parentElement;
+    const wrapper = legacyRoomInput.closest('.form-group') || legacyRoomInput.parentElement;
     if (wrapper) wrapper.remove();
   }
 }
