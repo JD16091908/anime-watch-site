@@ -1,5 +1,8 @@
 const USERNAME_STORAGE = 'username';
 
+const CONFIG = window.AnivmesteConfig || {};
+const SUPPORT_CONFIG = CONFIG.support || {};
+
 function safeLocalStorageGet(key) {
   try {
     return localStorage.getItem(key);
@@ -18,7 +21,10 @@ function safeLocalStorageSet(key, value) {
 }
 
 function sanitizeUsername(name) {
-  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+  return String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 30);
 }
 
 function generateRandomNickname() {
@@ -30,6 +36,7 @@ function generateRandomNickname() {
 function getSavedUsername() {
   const saved = sanitizeUsername(safeLocalStorageGet(USERNAME_STORAGE));
   if (saved) return saved;
+
   const generated = generateRandomNickname();
   safeLocalStorageSet(USERNAME_STORAGE, generated);
   return generated;
@@ -54,6 +61,7 @@ function redirectToRoom(roomId, username, accessToken = '') {
 function removeLegacyJoinControls() {
   const legacyJoinBtn = document.getElementById('joinRoomBtn');
   const legacyRoomInput = document.getElementById('roomId');
+
   if (legacyJoinBtn) legacyJoinBtn.remove();
   if (legacyRoomInput) {
     const wrapper = legacyRoomInput.closest('.form-group') || legacyRoomInput.parentElement;
@@ -61,8 +69,80 @@ function removeLegacyJoinControls() {
   }
 }
 
+function forceShowRevealBlocks() {
+  const revealNodes = document.querySelectorAll('.reveal');
+  revealNodes.forEach((node) => {
+    node.classList.add('revealed', 'is-visible');
+    node.style.opacity = '1';
+    node.style.transform = 'none';
+    node.style.visibility = 'visible';
+  });
+}
+
+function openModal(modalEl) {
+  if (!modalEl) return;
+  modalEl.classList.remove('hidden', 'is-hiding');
+  modalEl.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+  requestAnimationFrame(() => modalEl.classList.add('is-visible'));
+}
+
+function closeModal(modalEl) {
+  if (!modalEl || modalEl.classList.contains('hidden')) return;
+  modalEl.classList.remove('is-visible');
+  modalEl.classList.add('is-hiding');
+
+  setTimeout(() => {
+    modalEl.classList.add('hidden');
+    modalEl.classList.remove('is-hiding');
+    modalEl.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+  }, 220);
+}
+
+function setupModals() {
+  const aboutModal = document.getElementById('aboutModal');
+  const supportModal = document.getElementById('supportModal');
+
+  const aboutServiceBtn = document.getElementById('aboutServiceBtn');
+  const supportProjectBtn = document.getElementById('supportProjectBtn');
+
+  const closeAboutModalBtn = document.getElementById('closeAboutModalBtn');
+  const closeSupportModalBtn = document.getElementById('closeSupportModalBtn');
+
+  const aboutModalBackdrop = document.getElementById('aboutModalBackdrop');
+  const supportModalBackdrop = document.getElementById('supportModalBackdrop');
+
+  const supportBoostyLink = document.getElementById('supportBoostyLink');
+  const supportDonationAlertsLink = document.getElementById('supportDonationAlertsLink');
+  const supportModalDescription = document.getElementById('supportModalDescription');
+  const supportModalThanks = document.getElementById('supportModalThanks');
+
+  if (supportBoostyLink) supportBoostyLink.href = SUPPORT_CONFIG.boostyUrl || '#';
+  if (supportDonationAlertsLink) supportDonationAlertsLink.href = SUPPORT_CONFIG.donationAlertsUrl || '#';
+  if (supportModalDescription) supportModalDescription.textContent = SUPPORT_CONFIG.description || '';
+  if (supportModalThanks) supportModalThanks.textContent = SUPPORT_CONFIG.thanksText || '';
+
+  aboutServiceBtn?.addEventListener('click', () => openModal(aboutModal));
+  supportProjectBtn?.addEventListener('click', () => openModal(supportModal));
+
+  closeAboutModalBtn?.addEventListener('click', () => closeModal(aboutModal));
+  closeSupportModalBtn?.addEventListener('click', () => closeModal(supportModal));
+
+  aboutModalBackdrop?.addEventListener('click', () => closeModal(aboutModal));
+  supportModalBackdrop?.addEventListener('click', () => closeModal(supportModal));
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (aboutModal && !aboutModal.classList.contains('hidden')) closeModal(aboutModal);
+    if (supportModal && !supportModal.classList.contains('hidden')) closeModal(supportModal);
+  });
+}
+
 function setupHomeActions() {
   removeLegacyJoinControls();
+  forceShowRevealBlocks();
+  setupModals();
 
   const usernameInput = document.getElementById('username');
   const createRoomBtn = document.getElementById('createRoomBtn');
@@ -73,9 +153,9 @@ function setupHomeActions() {
   usernameInput.value = getSavedUsername();
 
   const getUsername = () => {
-    const u = sanitizeUsername(usernameInput.value) || generateRandomNickname();
-    safeLocalStorageSet(USERNAME_STORAGE, u);
-    return u;
+    const value = sanitizeUsername(usernameInput.value) || generateRandomNickname();
+    safeLocalStorageSet(USERNAME_STORAGE, value);
+    return value;
   };
 
   createRoomBtn.addEventListener('click', () => {
