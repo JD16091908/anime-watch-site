@@ -7,6 +7,7 @@ const DONATIONALERTS_URL = SUPPORT_CONFIG.donationAlertsUrl || '#';
 
 const params = new URLSearchParams(window.location.search);
 const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] || '');
+const roomAccessToken = String(params.get('access') || '').trim();
 
 const SEARCH_ENDPOINTS = ['/api/kodik/search', '/api/yummy/search'];
 const SELECT_ENDPOINTS = ['/api/kodik/anime/by-selection', '/api/yummy/anime/by-selection'];
@@ -161,6 +162,7 @@ let usersRenderTicker = null;
 
 let showAllSearchResults = false;
 let lastSearchResults = [];
+let lastSearchQueryNormalized = '';
 
 let activeSearchAbortController = null;
 let lastRenderedSearchSignature = '';
@@ -431,19 +433,48 @@ function getIframeUrl(video) {
   return video?.iframeUrl || video?.iframe_url || null;
 }
 
+function extractTbIndex(title) {
+  const t = String(title || '');
+  const m =
+    t.match(/\[(?:tb|тв|tv)[- ]?(\d+)\]/i) ||
+    t.match(/\b(?:tb|тв|tv)[- ]?(\d+)\b/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function scoreBucket(score) {
+  const s = Number(score) || 0;
+  const BUCKET_SIZE = 8000;
+  return Math.floor(s / BUCKET_SIZE);
+}
+
 function sortSearchResults(items) {
   return [...(items || [])].sort((a, b) => {
-    const scoreA = Number(a?.score) || 0;
-    const scoreB = Number(b?.score) || 0;
-    if (scoreB !== scoreA) return scoreB - scoreA;
+    const sA = Number(a?.score) || 0;
+    const sB = Number(b?.score) || 0;
+
+    const bA = scoreBucket(sA);
+    const bB = scoreBucket(sB);
+    if (bB !== bA) return bB - bA;
 
     const spA = Number(a?.serialPriority) || 0;
     const spB = Number(b?.serialPriority) || 0;
     if (spB !== spA) return spB - spA;
 
+    const tbA = extractTbIndex(a?.title);
+    const tbB = extractTbIndex(b?.title);
+    if (tbA !== null || tbB !== null) {
+      if (tbA === null) return 1;
+      if (tbB === null) return -1;
+      if (tbA !== tbB) return tbA - tbB;
+    }
+
     const yearA = Number(a?.year) || 9999;
     const yearB = Number(b?.year) || 9999;
     if (yearA !== yearB) return yearA - yearB;
+
+    if (sB !== sA) return sB - sA;
 
     return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
   });
@@ -1256,7 +1287,10 @@ async function fetchSearchResults(rawQuery, token) {
   const cached = getClientCachedSearch(normalizedQuery);
   if (cached) {
     if (token !== latestSearchToken) return;
+
+    lastSearchQueryNormalized = normalizedQuery;
     lastSearchResults = cached;
+
     renderAnimeResults(lastSearchResults);
     if (searchStatus) {
       searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
@@ -1280,12 +1314,71 @@ async function fetchSearchResults(rawQuery, token) {
   const prepared = sortSearchResults(Array.isArray(data) ? data : []);
   setClientCachedSearch(normalizedQuery, prepared);
 
+  lastSearchQueryNormalized = normalizedQuery;
   lastSearchResults = prepared;
+
   renderAnimeResults(lastSearchResults);
 
   if (searchStatus) {
     searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
   }
+}
+
+async function triggerSearchNow(rawQuery) {
+  const value = String(rawQuery || '').trim();
+  const normalized = normalizeSearchQuery(value);
+
+  if (!value || normalized.length < SEARCH_MIN_LENGTH) {
+    return;
+  }
+
+  if (!canControl()) return;
+
+  latestSearchToken += 1;
+  const token = latestSearchToken;
+
+  showAllSearchResults = false;
+  if (searchStatus) searchStatus.textContent = 'Поиск...';
+
+  try {
+    await fetchSearchResults(value, token);
+  } catch (error) {
+    if (token !== latestSearchToken) return;
+    if (error?.name === 'AbortError') return;
+    if (searchStatus) searchStatus.textContent = 'Ошибка API. Проверь маршруты /api/kodik/* в server.js';
+    clearSearchResultsUi();
+  }
+}
+
+function reopenSearchDropdownFromInput() {
+  if (!searchInput) return;
+  if (!canControl()) return;
+
+  const rawQuery = String(searchInput.value || '').trim();
+  const normalizedQuery = normalizeSearchQuery(rawQuery);
+
+  if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) {
+    return;
+  }
+
+  // 1) Если это последний запрос — просто показываем
+  if (lastSearchResults.length && lastSearchQueryNormalized === normalizedQuery) {
+    renderAnimeResults(lastSearchResults);
+    return;
+  }
+
+  // 2) Если есть в клиентском кэше — показываем
+  const cached = getClientCachedSearch(normalizedQuery);
+  if (cached && cached.length) {
+    lastSearchQueryNormalized = normalizedQuery;
+    lastSearchResults = cached;
+    renderAnimeResults(lastSearchResults);
+    if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
+    return;
+  }
+
+  // 3) Иначе — выполняем поиск по текущему значению без необходимости "допечатывать"
+  triggerSearchNow(rawQuery);
 }
 
 const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
@@ -1299,6 +1392,7 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
       activeSearchAbortController = null;
     }
     lastSearchResults = [];
+    lastSearchQueryNormalized = '';
     showAllSearchResults = false;
     clearSearchResultsUi();
     if (searchStatus) searchStatus.textContent = 'Введите минимум 2 символа';
@@ -1471,7 +1565,7 @@ if (window.PlayerModule?.onEpisodeEnded) {
 
 socket.on('connect', () => {
   if (roomId !== 'solo') {
-    socket.emit('join-room', { roomId, username, userKey });
+    socket.emit('join-room', { roomId, username, userKey, accessToken: roomAccessToken });
   } else {
     isHost = true;
     updateControlState();
@@ -1604,10 +1698,14 @@ if (searchInput) {
     debouncedSearchAnime(searchInput.value);
   });
 
+  // FIX #1: показываем результаты по клику (даже если focus уже был)
+  searchInput.addEventListener('click', () => {
+    reopenSearchDropdownFromInput();
+  });
+
+  // Плюс оставляем поведение на focus
   searchInput.addEventListener('focus', () => {
-    if (lastSearchResults.length) {
-      renderAnimeResults(lastSearchResults);
-    }
+    reopenSearchDropdownFromInput();
   });
 
   searchInput.addEventListener('keydown', (event) => {
