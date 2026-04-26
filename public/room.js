@@ -16,6 +16,7 @@ const SYNC_DRIFT_INTERVAL = 2000;
 const SYNC_SEEK_COOLDOWN = 1500;
 const HOST_BROADCAST_INTERVAL = 800;
 const USER_TIME_INTERVAL = 1000;
+const USER_TIME_STALE_MS = 15000;
 
 function updateRoomDocumentMeta(currentRoomId) {
   const title = currentRoomId === 'solo' ? 'Одиночный просмотр' : 'Комната просмотра';
@@ -993,22 +994,24 @@ function sortSearchResults(items) {
     const mpB = Number(b?.matchPriority);
     const safeMpA = Number.isFinite(mpA) ? mpA : 9;
     const safeMpB = Number.isFinite(mpB) ? mpB : 9;
+
     if (safeMpA !== safeMpB) return safeMpA - safeMpB;
 
-    const sA = Number(a?.score) || 0;
-    const sB = Number(b?.score) || 0;
-    const bA = scoreBucket(sA);
-    const bB = scoreBucket(sB);
-
-    if (bB !== bA) return bB - bA;
-
-    const spA = Number(a?.serialPriority) || 0;
-    const spB = Number(b?.serialPriority) || 0;
-    if (spB !== spA) return spB - spA;
+    const releaseA = Number(a?.releaseTs) || 0;
+    const releaseB = Number(b?.releaseTs) || 0;
+    if (releaseA || releaseB) {
+      if (!releaseA) return 1;
+      if (!releaseB) return -1;
+      if (releaseA !== releaseB) return releaseA - releaseB;
+    }
 
     const yearA = Number(a?.year) || 0;
     const yearB = Number(b?.year) || 0;
-    if (yearA !== yearB) return yearA - yearB;
+    if (yearA || yearB) {
+      if (!yearA) return 1;
+      if (!yearB) return -1;
+      if (yearA !== yearB) return yearA - yearB;
+    }
 
     const tbA = extractTbIndex(a?.title);
     const tbB = extractTbIndex(b?.title);
@@ -1018,7 +1021,10 @@ function sortSearchResults(items) {
       if (tbA !== tbB) return tbA - tbB;
     }
 
+    const sA = Number(a?.score) || 0;
+    const sB = Number(b?.score) || 0;
     if (sB !== sA) return sB - sA;
+
     return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
   });
 }
@@ -1338,12 +1344,12 @@ function saveNickname() {
 }
 
 function getDisplayedUserTime(user) {
-  const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
-  if (!hasTime) return null;
+  const safeCurrentTime = Number(user?.currentTime);
+  const hasTime = Number.isFinite(safeCurrentTime) && safeCurrentTime >= 0;
 
-  const baseTime = Number(user.currentTime) || 0;
+  const baseTime = hasTime ? safeCurrentTime : 0;
   const paused = !!user?.playbackPaused;
-  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
+  const updatedAt = Number(user?.timeUpdatedAt || 0);
 
   if (paused || !updatedAt) return baseTime;
 
@@ -1362,7 +1368,11 @@ function renderUsers(users) {
 
   usersList.innerHTML = latestRoomUsers.map(user => {
     const displayTime = getDisplayedUserTime(user);
-    const timeText = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '—:—';
+    const timeText = formatWatchTime(displayTime);
+    const lastUpdateAt = Number(user?.timeUpdatedAt || 0);
+    const isFresh = lastUpdateAt > 0 && (Date.now() - lastUpdateAt) <= USER_TIME_STALE_MS;
+    const isLive = !user?.playbackPaused && isFresh;
+
     return `
       <div class="user-item">
         <div class="user-main">
@@ -1370,7 +1380,7 @@ function renderUsers(users) {
             <span class="user-name">${escapeHtml(user.username)}</span>
             ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
           </div>
-          <div class="user-time" title="Текущее время просмотра">${escapeHtml(timeText)}</div>
+          <div class="user-time ${isLive ? 'is-live' : 'is-paused'}" title="${isLive ? 'Сейчас смотрит' : 'На паузе'}">${escapeHtml(timeText)}</div>
         </div>
       </div>
     `;
