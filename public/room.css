@@ -118,7 +118,9 @@ body {
   font-size: 30px;
   line-height: 1;
   font-weight: 900;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  text-transform: none;
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 .top-center {
@@ -856,17 +858,48 @@ body {
 }
 
 .user-time {
+  position: relative;
   flex-shrink: 0;
-  min-width: 64px;
-  text-align: right;
-  padding: 6px 10px;
-  border-radius: var(--room-radius-xs);
-  background: rgba(255, 255, 255, 0.08);
-  color: #dbe7ff;
+  min-width: 82px;
+  text-align: center;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e7eeff;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.user-time.is-live {
+  background: linear-gradient(180deg, rgba(123, 140, 255, 0.24) 0%, rgba(123, 140, 255, 0.14) 100%);
+  border-color: rgba(143, 163, 255, 0.45);
+  box-shadow: 0 0 0 1px rgba(143, 163, 255, 0.18) inset;
+}
+
+.user-time.is-paused {
+  opacity: 0.92;
+}
+
+.user-time.is-live::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #8fa4ff;
+  box-shadow: 0 0 10px rgba(143, 164, 255, 0.95);
+  vertical-align: middle;
+  animation: user-time-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes user-time-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.06); }
 }
 
 .chat-block {
@@ -1164,7 +1197,7 @@ body {
   }
 
   .user-time {
-    text-align: left;
+    text-align: center;
     width: fit-content;
   }
 
