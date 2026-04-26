@@ -11,12 +11,11 @@ const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] ||
 const SEARCH_ENDPOINTS = ['/api/kodik/search', '/api/yummy/search'];
 const SELECT_ENDPOINTS = ['/api/kodik/anime/by-selection', '/api/yummy/anime/by-selection'];
 
-// ─── Синхронизация: константы ────────────────────────────────────────────────
-const SYNC_TOLERANCE_SEC   = 2.5;   // допустимое расхождение в секундах
-const SYNC_DRIFT_INTERVAL  = 2000;  // период проверки дрейфа (мс)
-const SYNC_SEEK_COOLDOWN   = 1500;  // минимальный интервал между принудительными seek'ами (мс)
-const HOST_BROADCAST_INTERVAL = 800; // хост шлёт время каждые N мс
-const USER_TIME_INTERVAL   = 1000;  // зритель шлёт своё время каждые N мс
+const SYNC_TOLERANCE_SEC = 2.5;
+const SYNC_DRIFT_INTERVAL = 2000;
+const SYNC_SEEK_COOLDOWN = 1500;
+const HOST_BROADCAST_INTERVAL = 800;
+const USER_TIME_INTERVAL = 1000;
 
 function updateRoomDocumentMeta(currentRoomId) {
   const title = currentRoomId === 'solo' ? 'Одиночный просмотр' : 'Комната просмотра';
@@ -27,48 +26,53 @@ function updateRoomDocumentMeta(currentRoomId) {
 
 updateRoomDocumentMeta(roomId);
 
-const USER_KEY_STORAGE        = 'anivmeste_user_key';
-const USERNAME_STORAGE        = 'username';
+const USER_KEY_STORAGE = 'anivmeste_user_key';
+const USERNAME_STORAGE = 'username';
 const MANUAL_USERNAME_STORAGE = 'saved_username_manual';
 
-const SEARCH_MIN_LENGTH     = 2;
-const SEARCH_DEBOUNCE_MS    = 300;
-const SEARCH_CLIENT_CACHE_TTL_MS  = 3 * 60 * 1000;
-const SEARCH_CLIENT_CACHE_MAX     = 70;
+const SEARCH_MIN_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_CLIENT_CACHE_TTL_MS = 3 * 60 * 1000;
+const SEARCH_CLIENT_CACHE_MAX = 70;
 
 const RANDOM_NICK_ADJECTIVES = [
-  'Swift','Silent','Crimson','Silver','Golden','Shadow','Lunar','Solar','Misty','Stormy',
-  'Frozen','Burning','Shining','Dark','Bright','Wild','Calm','Rapid','Lucky','Cosmic',
-  'Electric','Ancient','Hidden','Secret','Fierce','Gentle','Brave','Noble','Clever','Crazy',
-  'Dreamy','Ghostly','Royal','Tiny','Mega','Hyper','Epic','Magic','Cyber','Neon',
-  'Velvet','Iron','Crystal','Phantom','Thunder','Ashen','Scarlet','Emerald','Ivory','Obsidian',
-  'Azure','Ruby','Sapphire','Amber','Pearl','Snowy','Windy','Dizzy','Mellow','Glowing',
-  'Stealthy','Vivid','Arcane','Quantum','Pixel','Turbo','Nova','Stellar','Void','Night',
-  'Dawn','Dusk','Blazing','Chill','Savage','Elegant','Fearless','Wicked','Radiant','Hollow'
+  'Swift', 'Silent', 'Crimson', 'Silver', 'Golden', 'Shadow', 'Lunar', 'Solar', 'Misty', 'Stormy',
+  'Frozen', 'Burning', 'Shining', 'Dark', 'Bright', 'Wild', 'Calm', 'Rapid', 'Lucky', 'Cosmic',
+  'Electric', 'Ancient', 'Hidden', 'Secret', 'Fierce', 'Gentle', 'Brave', 'Noble', 'Clever', 'Crazy',
+  'Dreamy', 'Ghostly', 'Royal', 'Tiny', 'Mega', 'Hyper', 'Epic', 'Magic', 'Cyber', 'Neon',
+  'Velvet', 'Iron', 'Crystal', 'Phantom', 'Thunder', 'Ashen', 'Scarlet', 'Emerald', 'Ivory', 'Obsidian',
+  'Azure', 'Ruby', 'Sapphire', 'Amber', 'Pearl', 'Snowy', 'Windy', 'Dizzy', 'Mellow', 'Glowing',
+  'Stealthy', 'Vivid', 'Arcane', 'Quantum', 'Pixel', 'Turbo', 'Nova', 'Stellar', 'Void', 'Night',
+  'Dawn', 'Dusk', 'Blazing', 'Chill', 'Savage', 'Elegant', 'Fearless', 'Wicked', 'Radiant', 'Hollow'
 ];
 
 const RANDOM_NICK_NOUNS = [
-  'Fox','Wolf','Tiger','Dragon','Phoenix','Raven','Falcon','Hawk','Panda','Rabbit',
-  'Samurai','Ninja','Ronin','Knight','Wizard','Mage','Hunter','Rider','Pirate','Guardian',
-  'Otter','Bear','Eagle','Shark','Panther','Lynx','Crow','Viper','Leopard','Cobra',
-  'Kitsune','Tanuki','Yokai','Spirit','Ghost','Demon','Angel','Comet','Meteor','Star',
-  'Moon','Blade','Arrow','Storm','Flame','Frost','Thunder','Shadow','Spark','Stone',
-  'Echo','Whisper','Glitch','Pixel','Byte','Cipher','Nova','Orbit','Voyager','Drifter',
-  'Wanderer','Sage','Monk','Brawler','Sniper','Scout','Captain','King','Queen','Prince',
-  'Princess','Beast','Slayer','Seeker','Walker','Chaser','Nomad','Reaper','Sentinel','Alchemist'
+  'Fox', 'Wolf', 'Tiger', 'Dragon', 'Phoenix', 'Raven', 'Falcon', 'Hawk', 'Panda', 'Rabbit',
+  'Samurai', 'Ninja', 'Ronin', 'Knight', 'Wizard', 'Mage', 'Hunter', 'Rider', 'Pirate', 'Guardian',
+  'Otter', 'Bear', 'Eagle', 'Shark', 'Panther', 'Lynx', 'Crow', 'Viper', 'Leopard', 'Cobra',
+  'Kitsune', 'Tanuki', 'Yokai', 'Spirit', 'Ghost', 'Demon', 'Angel', 'Comet', 'Meteor', 'Star',
+  'Moon', 'Blade', 'Arrow', 'Storm', 'Flame', 'Frost', 'Thunder', 'Shadow', 'Spark', 'Stone',
+  'Echo', 'Whisper', 'Glitch', 'Pixel', 'Byte', 'Cipher', 'Nova', 'Orbit', 'Voyager', 'Drifter',
+  'Wanderer', 'Sage', 'Monk', 'Brawler', 'Sniper', 'Scout', 'Captain', 'King', 'Queen', 'Prince',
+  'Princess', 'Beast', 'Slayer', 'Seeker', 'Walker', 'Chaser', 'Nomad', 'Reaper', 'Sentinel', 'Alchemist'
 ];
 
-// ─── localStorage ─────────────────────────────────────────────────────────────
-
 function safeLocalStorageGet(key) {
-  try { return localStorage.getItem(key); } catch { return null; }
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 function safeLocalStorageSet(key, value) {
-  try { localStorage.setItem(key, value); return true; } catch { return false; }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
 }
-
-// ─── Утилиты ──────────────────────────────────────────────────────────────────
 
 function sanitizeUsername(name) {
   return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
@@ -120,8 +124,6 @@ function getOrCreateUserKey() {
 
 const userKey = getOrCreateUserKey();
 
-// ─── Состояние ────────────────────────────────────────────────────────────────
-
 let isHost = false;
 let selectedAnime = null;
 let selectedPlayer = null;
@@ -166,43 +168,39 @@ let currentState = {
   }
 };
 
-// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const hostBadge = document.getElementById('hostBadge');
+const usersList = document.getElementById('usersList');
+const animeList = document.getElementById('animeList');
+const searchInput = document.getElementById('searchInput');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const cinemaModeBtn = document.getElementById('cinemaModeBtn');
+const supportRoomBtn = document.getElementById('supportRoomBtn');
+const roomPage = document.getElementById('roomPage');
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const searchStatus = document.getElementById('searchStatus');
+const selectedAnimeInfo = document.getElementById('selectedAnimeInfo');
+const hostSearchHint = document.getElementById('hostSearchHint');
+const nicknameInput = document.getElementById('nicknameInput');
+const saveNicknameBtn = document.getElementById('saveNicknameBtn');
 
-const hostBadge                  = document.getElementById('hostBadge');
-const usersList                  = document.getElementById('usersList');
-const animeList                  = document.getElementById('animeList');
-const searchInput                = document.getElementById('searchInput');
-const copyLinkBtn                = document.getElementById('copyLinkBtn');
-const cinemaModeBtn              = document.getElementById('cinemaModeBtn');
-const supportRoomBtn             = document.getElementById('supportRoomBtn');
-const roomPage                   = document.getElementById('roomPage');
-const chatMessages               = document.getElementById('chatMessages');
-const chatInput                  = document.getElementById('chatInput');
-const sendBtn                    = document.getElementById('sendBtn');
-const searchStatus               = document.getElementById('searchStatus');
-const selectedAnimeInfo          = document.getElementById('selectedAnimeInfo');
-const hostSearchHint             = document.getElementById('hostSearchHint');
-const nicknameInput              = document.getElementById('nicknameInput');
-const saveNicknameBtn            = document.getElementById('saveNicknameBtn');
+const overlayPlayerDropdown = document.getElementById('overlayPlayerDropdown');
+const overlayEpisodeDropdown = document.getElementById('overlayEpisodeDropdown');
+const overlayPlayerBtn = document.getElementById('overlayPlayerBtn');
+const overlayEpisodeBtn = document.getElementById('overlayEpisodeBtn');
+const overlayPlayerBtnText = document.getElementById('overlayPlayerBtnText');
+const overlayEpisodeBtnText = document.getElementById('overlayEpisodeBtnText');
+const overlayPlayerMenu = document.getElementById('overlayPlayerMenu');
+const overlayEpisodeMenu = document.getElementById('overlayEpisodeMenu');
 
-const overlayPlayerDropdown      = document.getElementById('overlayPlayerDropdown');
-const overlayEpisodeDropdown     = document.getElementById('overlayEpisodeDropdown');
-const overlayPlayerBtn           = document.getElementById('overlayPlayerBtn');
-const overlayEpisodeBtn          = document.getElementById('overlayEpisodeBtn');
-const overlayPlayerBtnText       = document.getElementById('overlayPlayerBtnText');
-const overlayEpisodeBtnText      = document.getElementById('overlayEpisodeBtnText');
-const overlayPlayerMenu          = document.getElementById('overlayPlayerMenu');
-const overlayEpisodeMenu         = document.getElementById('overlayEpisodeMenu');
-
-const roomSupportModal           = document.getElementById('roomSupportModal');
-const roomSupportModalBackdrop   = document.getElementById('roomSupportModalBackdrop');
-const closeRoomSupportModalBtn   = document.getElementById('closeRoomSupportModalBtn');
-const roomSupportDescription     = document.getElementById('roomSupportDescription');
-const roomSupportThanks          = document.getElementById('roomSupportThanks');
-const roomSupportBoostyLink      = document.getElementById('roomSupportBoostyLink');
+const roomSupportModal = document.getElementById('roomSupportModal');
+const roomSupportModalBackdrop = document.getElementById('roomSupportModalBackdrop');
+const closeRoomSupportModalBtn = document.getElementById('closeRoomSupportModalBtn');
+const roomSupportDescription = document.getElementById('roomSupportDescription');
+const roomSupportThanks = document.getElementById('roomSupportThanks');
+const roomSupportBoostyLink = document.getElementById('roomSupportBoostyLink');
 const roomSupportDonationAlertsLink = document.getElementById('roomSupportDonationAlertsLink');
-
-// ─── Начальное заполнение ─────────────────────────────────────────────────────
 
 if (nicknameInput) nicknameInput.value = username;
 if (roomSupportDescription) roomSupportDescription.textContent = SUPPORT_CONFIG.description || '';
@@ -210,18 +208,17 @@ if (roomSupportThanks) roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText
 if (roomSupportBoostyLink) roomSupportBoostyLink.href = BOOSTY_URL;
 if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
 
-// ─── Debounce ─────────────────────────────────────────────────────────────────
-
 if (!window.AnivmesteDebounce) {
   window.AnivmesteDebounce = function debounce(fn, wait = 300) {
     let t = null;
-    const wrapped = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    const wrapped = (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
     wrapped.cancel = () => clearTimeout(t);
     return wrapped;
   };
 }
-
-// ─── AudioContext ─────────────────────────────────────────────────────────────
 
 function ensureAudioContext() {
   if (audioContext) return audioContext;
@@ -271,19 +268,21 @@ function playChatSound() {
     filter.Q.setValueAtTime(0.6, now);
     masterGain.gain.setValueAtTime(0.9, now);
 
-    osc1.connect(gain1); osc2.connect(gain2);
-    gain1.connect(filter); gain2.connect(filter);
+    osc1.connect(gain1);
+    osc2.connect(gain2);
+    gain1.connect(filter);
+    gain2.connect(filter);
     filter.connect(masterGain);
     masterGain.connect(ctx.destination);
 
-    osc1.start(now); osc2.start(now);
-    osc1.stop(now + 0.085); osc2.stop(now + 0.085);
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.085);
+    osc2.stop(now + 0.085);
   } catch (error) {
     console.warn('Не удалось воспроизвести звук чата:', error);
   }
 }
-
-// ─── Support modal ────────────────────────────────────────────────────────────
 
 function openRoomSupportModal() {
   if (!roomSupportModal) return;
@@ -304,8 +303,6 @@ function closeRoomSupportModal() {
     document.body.classList.remove('modal-open');
   }, 220);
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const canControl = () => roomId === 'solo' || isHost;
 
@@ -332,7 +329,11 @@ async function readJsonSafely(response) {
   const contentType = response.headers.get('content-type') || '';
   const text = await response.text();
   if (!contentType.includes('application/json')) throw new Error(`Сервер вернул не JSON. HTTP ${response.status}`);
-  try { return JSON.parse(text); } catch { throw new Error('Сервер вернул битый JSON'); }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Сервер вернул битый JSON');
+  }
 }
 
 async function fetchJsonFallback(endpoints, options = {}) {
@@ -343,7 +344,9 @@ async function fetchJsonFallback(endpoints, options = {}) {
       const data = await readJsonSafely(response);
       if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
       return data;
-    } catch (error) { lastError = error; }
+    } catch (error) {
+      lastError = error;
+    }
   }
   throw lastError || new Error('Сервис временно недоступен');
 }
@@ -357,7 +360,19 @@ function formatWatchTime(seconds) {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-// ─── Видео / озвучки / сезоны / серии ────────────────────────────────────────
+function getEffectivePlaybackTime(playback = currentState.playback) {
+  const safe = playback || {};
+  const base = typeof safe.currentTime === 'number' && !Number.isNaN(safe.currentTime)
+    ? safe.currentTime
+    : null;
+
+  if (base === null) return null;
+  if (safe.paused) return base;
+
+  const updatedAt = Number(safe.updatedAt || Date.now()) || Date.now();
+  const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
+  return base + elapsed;
+}
 
 function getPlayerName(video) {
   return String(video?.player || video?.dubbing || 'unknown').trim();
@@ -436,8 +451,6 @@ function findDefaultContext(videos) {
   return { player, season, episode };
 }
 
-// ─── Синхронизация (хост → зрители) ──────────────────────────────────────────
-
 function getInterpolatedHostTime() {
   if (lastKnownHostTime === null) return null;
   if (currentState.playback.paused) return lastKnownHostTime;
@@ -463,16 +476,22 @@ function applyPlaybackState(playback, { force = false } = {}) {
     const drift = Math.abs((lastAppliedTargetTime ?? -999) - targetTime);
 
     if (force || timeSinceLastApply > SYNC_SEEK_COOLDOWN || drift > SYNC_TOLERANCE_SEC) {
-      try { window.PlayerModule.seekTo(targetTime); } catch {}
+      try {
+        window.PlayerModule.seekTo(targetTime);
+      } catch {}
       lastAppliedTargetTime = targetTime;
       lastAppliedAt = now;
     }
   }
 
   if (playback.paused) {
-    try { window.PlayerModule.pause(); } catch {}
+    try {
+      window.PlayerModule.pause();
+    } catch {}
   } else {
-    try { window.PlayerModule.play(); } catch {}
+    try {
+      window.PlayerModule.play();
+    } catch {}
   }
 }
 
@@ -484,15 +503,16 @@ function checkDrift() {
   const hostTime = getInterpolatedHostTime();
   if (hostTime === null) return;
 
-  const myTime = currentState.playback.currentTime;
+  const myTime = getEffectivePlaybackTime(currentState.playback);
   if (typeof myTime !== 'number' || Number.isNaN(myTime)) return;
 
   const drift = Math.abs(myTime - hostTime);
   const now = Date.now();
 
   if (drift > SYNC_TOLERANCE_SEC && now - lastForcedSyncAt > SYNC_SEEK_COOLDOWN) {
-    console.log(`[Sync] drift=${drift.toFixed(2)}s, seeking to hostTime=${hostTime.toFixed(2)}s`);
-    try { window.PlayerModule.seekTo(hostTime); } catch {}
+    try {
+      window.PlayerModule.seekTo(hostTime);
+    } catch {}
     lastAppliedTargetTime = hostTime;
     lastAppliedAt = now;
     lastForcedSyncAt = now;
@@ -506,10 +526,11 @@ function startDriftCheck() {
 }
 
 function stopDriftCheck() {
-  if (driftCheckTimer) { clearInterval(driftCheckTimer); driftCheckTimer = null; }
+  if (driftCheckTimer) {
+    clearInterval(driftCheckTimer);
+    driftCheckTimer = null;
+  }
 }
-
-// ─── Таймеры хоста / зрителя ─────────────────────────────────────────────────
 
 function startHostTimers() {
   stopHostTimers();
@@ -517,37 +538,54 @@ function startHostTimers() {
 
   hostTimeBroadcastTimer = setInterval(() => {
     if (!isHost || roomId === 'solo' || !currentState.embedUrl) return;
-    const ct = currentState.playback.currentTime;
+
+    const ct = getEffectivePlaybackTime(currentState.playback);
     if (typeof ct === 'number' && ct >= 0) {
+      currentState.playback.currentTime = ct;
+      currentState.playback.updatedAt = Date.now();
+
       socket.emit('player-control', {
-        roomId, action: 'timeupdate', currentTime: ct
+        roomId,
+        action: 'timeupdate',
+        currentTime: ct
       });
     }
   }, HOST_BROADCAST_INTERVAL);
 }
 
 function stopHostTimers() {
-  if (hostTimeBroadcastTimer) { clearInterval(hostTimeBroadcastTimer); hostTimeBroadcastTimer = null; }
+  if (hostTimeBroadcastTimer) {
+    clearInterval(hostTimeBroadcastTimer);
+    hostTimeBroadcastTimer = null;
+  }
+}
+
+function emitCurrentUserTime() {
+  if (roomId === 'solo' || !currentState.embedUrl) return;
+
+  const ct = getEffectivePlaybackTime(currentState.playback);
+  if (typeof ct === 'number' && ct >= 0) {
+    socket.emit('update-user-time', { roomId, currentTime: ct });
+  }
 }
 
 function startUserTimeTimer() {
   stopUserTimeTimer();
   if (roomId === 'solo') return;
 
+  emitCurrentUserTime();
+
   userTimeBroadcastTimer = setInterval(() => {
-    if (!currentState.embedUrl) return;
-    const ct = currentState.playback.currentTime;
-    if (typeof ct === 'number' && ct >= 0) {
-      socket.emit('update-user-time', { roomId, currentTime: ct });
-    }
+    emitCurrentUserTime();
   }, USER_TIME_INTERVAL);
 }
 
 function stopUserTimeTimer() {
-  if (userTimeBroadcastTimer) { clearInterval(userTimeBroadcastTimer); userTimeBroadcastTimer = null; }
+  if (userTimeBroadcastTimer) {
+    clearInterval(userTimeBroadcastTimer);
+    userTimeBroadcastTimer = null;
+  }
 }
-
-// ─── Нативные события плеера ──────────────────────────────────────────────────
 
 window.addEventListener('player:time-update', (e) => {
   const seconds = e.detail?.time;
@@ -585,8 +623,6 @@ window.addEventListener('player:pause', () => {
   });
 });
 
-// ─── UI helpers ───────────────────────────────────────────────────────────────
-
 function updateControlState() {
   const disabled = !canControl();
 
@@ -607,7 +643,9 @@ function updateControlState() {
     hostBadge.textContent = canControl() ? '👑 Хост' : '👀 Зритель';
   }
 
-  animeList?.querySelectorAll('button').forEach(btn => { btn.disabled = disabled; });
+  animeList?.querySelectorAll('button').forEach(btn => {
+    btn.disabled = disabled;
+  });
   if (overlayPlayerBtn) overlayPlayerBtn.disabled = disabled;
   if (overlayEpisodeBtn) overlayEpisodeBtn.disabled = disabled;
 }
@@ -625,8 +663,8 @@ function updateSelectedAnimeInfoContent(anime = null) {
     return;
   }
 
-  const players  = getUniquePlayers(anime?.videos || []);
-  const seasons  = getUniqueSeasons(anime?.videos || []);
+  const players = getUniquePlayers(anime?.videos || []);
+  const seasons = getUniqueSeasons(anime?.videos || []);
   const episodes = getUniqueEpisodes(anime?.videos || []);
   const descriptionContent = anime.description
     ? `<p class="selected-anime-description">${escapeHtml(anime.description)}</p>`
@@ -685,8 +723,6 @@ function showFirstEpisodeHintForHost() {
   sys('После загрузки первой серии при необходимости кликните по плееру один раз и нажмите play.');
 }
 
-// ─── Bridge / iframe ──────────────────────────────────────────────────────────
-
 let bridge = { playerType: 'unknown', iframeWindow: null };
 
 function resetBridge() {
@@ -697,7 +733,10 @@ function detachPlayerOverlayFromWrapper(playerWrapper) {
   if (!playerWrapper) return null;
   const overlayEl = document.getElementById('playerTopOverlay');
   if (!overlayEl) return null;
-  if (overlayEl.parentNode === playerWrapper) { overlayEl.remove(); return overlayEl; }
+  if (overlayEl.parentNode === playerWrapper) {
+    overlayEl.remove();
+    return overlayEl;
+  }
   return null;
 }
 
@@ -707,7 +746,7 @@ function attachPlayerOverlayToWrapper(playerWrapper, overlayEl) {
 }
 
 function hideOverlayMenus() {
-  isOverlayPlayerOpen  = false;
+  isOverlayPlayerOpen = false;
   isOverlayEpisodeOpen = false;
   overlayPlayerDropdown?.classList.remove('open');
   overlayEpisodeDropdown?.classList.remove('open');
@@ -735,11 +774,11 @@ function loadIframe(embedUrl) {
   stopUserTimeTimer();
   stopDriftCheck();
   resetBridge();
-  lastKnownHostTime    = null;
-  lastKnownHostTimeAt  = 0;
+  lastKnownHostTime = null;
+  lastKnownHostTimeAt = 0;
   lastAppliedTargetTime = null;
-  lastAppliedAt        = 0;
-  lastForcedSyncAt     = 0;
+  lastAppliedAt = 0;
+  lastForcedSyncAt = 0;
   pendingPlaybackApply = null;
 
   const preservedOverlay = detachPlayerOverlayFromWrapper(playerWrapper);
@@ -754,7 +793,9 @@ function loadIframe(embedUrl) {
 
   if (!isHost && roomId !== 'solo') {
     setTimeout(() => {
-      try { window.PlayerModule.pause(); } catch {}
+      try {
+        window.PlayerModule.pause();
+      } catch {}
     }, 200);
   }
 
@@ -775,7 +816,9 @@ function loadIframe(embedUrl) {
 
   setTimeout(() => {
     if (selectedAnime) {
-      try { renderOverlayControls(); } catch {}
+      try {
+        renderOverlayControls();
+      } catch {}
     }
   }, 50);
 
@@ -788,18 +831,19 @@ function loadIframe(embedUrl) {
   }
 }
 
-// ─── Overlay controls (только озвучка + серии) ────────────────────────────────
-
 function renderOverlayControls() {
-  if (!selectedAnime) { hideOverlay(); return; }
+  if (!selectedAnime) {
+    hideOverlay();
+    return;
+  }
 
-  const videos  = selectedAnime.videos || [];
+  const videos = selectedAnime.videos || [];
   const players = getUniquePlayers(videos);
 
   if (!selectedPlayer && players.length) selectedPlayer = players[0].name;
 
   const byPlayer = getVideosBySelectedPlayer(videos);
-  const seasons  = getUniqueSeasons(byPlayer);
+  const seasons = getUniqueSeasons(byPlayer);
 
   if (!selectedSeason || !seasons.find(s => s.season === selectedSeason)) {
     selectedSeason = seasons[0]?.season || 1;
@@ -889,11 +933,11 @@ function renderOverlayControls() {
 function launchEpisode(episode, anime) {
   if (!episode) return;
 
-  const embedUrl     = getIframeUrl(episode);
-  const season       = getSeasonNumber(episode);
+  const embedUrl = getIframeUrl(episode);
+  const season = getSeasonNumber(episode);
   const episodeNumber = getEpisodeNumber(episode);
-  const playerName   = getPlayerName(episode);
-  const title        = `${anime?.title || 'Аниме'} — ${playerName}, сезон ${season}, серия ${episodeNumber}`;
+  const playerName = getPlayerName(episode);
+  const title = `${anime?.title || 'Аниме'} — ${playerName}, сезон ${season}, серия ${episodeNumber}`;
 
   currentState = {
     animeId: anime?.animeId ?? null,
@@ -905,8 +949,8 @@ function launchEpisode(episode, anime) {
     playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
   };
 
-  selectedSeason  = season;
-  selectedPlayer  = playerName;
+  selectedSeason = season;
+  selectedPlayer = playerName;
   hasShownFirstEpisodeHint = false;
   userInteractedWithPlayer = true;
 
@@ -925,8 +969,6 @@ function launchEpisode(episode, anime) {
   }
 }
 
-// ─── Поиск ────────────────────────────────────────────────────────────────────
-
 function extractTbIndex(title) {
   const t = String(title || '');
   const m = t.match(/\[(?:tb|тв|tv)[- ]?(\d+)\]/i) || t.match(/\b(?:tb|тв|tv)[- ]?(\d+)\b/i);
@@ -939,23 +981,29 @@ function scoreBucket(score) {
   return Math.floor((Number(score) || 0) / 8000);
 }
 
-// ─── ИСПРАВЛЕННАЯ СОРТИРОВКА: от новых к старым по году ──────────────────────
 function sortSearchResults(items) {
   return [...(items || [])].sort((a, b) => {
+    const mpA = Number(a?.matchPriority);
+    const mpB = Number(b?.matchPriority);
+    const safeMpA = Number.isFinite(mpA) ? mpA : 9;
+    const safeMpB = Number.isFinite(mpB) ? mpB : 9;
+    if (safeMpA !== safeMpB) return safeMpA - safeMpB;
+
     const sA = Number(a?.score) || 0;
     const sB = Number(b?.score) || 0;
     const bA = scoreBucket(sA);
     const bB = scoreBucket(sB);
 
-    // 1. Сначала сортируем по bucket релевантности
     if (bB !== bA) return bB - bA;
 
-    // 2. Серийные приоритетнее фильмов
     const spA = Number(a?.serialPriority) || 0;
     const spB = Number(b?.serialPriority) || 0;
     if (spB !== spA) return spB - spA;
 
-    // 3. ТВ-индекс (ТВ-1, ТВ-2 и т.д.) — по возрастанию
+    const yearA = Number(a?.year) || 0;
+    const yearB = Number(b?.year) || 0;
+    if (yearA !== yearB) return yearA - yearB;
+
     const tbA = extractTbIndex(a?.title);
     const tbB = extractTbIndex(b?.title);
     if (tbA !== null || tbB !== null) {
@@ -964,15 +1012,7 @@ function sortSearchResults(items) {
       if (tbA !== tbB) return tbA - tbB;
     }
 
-    // 4. ГОД: от новых к старым (ИСПРАВЛЕНО: было yearA - yearB)
-    const yearA = Number(a?.year) || 0;
-    const yearB = Number(b?.year) || 0;
-    if (yearA !== yearB) return yearB - yearA;
-
-    // 5. Если год одинаковый — по score
     if (sB !== sA) return sB - sA;
-
-    // 6. По алфавиту
     return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
   });
 }
@@ -1001,7 +1041,10 @@ function getClientCachedSearch(query) {
   pruneClientSearchCache();
   const entry = clientSearchCache.get(query);
   if (!entry) return null;
-  if (Date.now() - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) { clientSearchCache.delete(query); return null; }
+  if (Date.now() - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
+    clientSearchCache.delete(query);
+    return null;
+  }
   return entry.data;
 }
 
@@ -1011,16 +1054,22 @@ function setClientCachedSearch(query, data) {
 }
 
 function clearSearchResultsUi() {
-  if (animeList) { animeList.innerHTML = ''; animeList.classList.remove('visible'); }
+  if (animeList) {
+    animeList.innerHTML = '';
+    animeList.classList.remove('visible');
+  }
   lastRenderedSearchSignature = '';
 }
 
 function renderAnimeResults(items) {
   if (!animeList) return;
-  if (!items.length) { clearSearchResultsUi(); return; }
+  if (!items.length) {
+    clearSearchResultsUi();
+    return;
+  }
 
   const visibleItems = showAllSearchResults ? items : items.slice(0, 5);
-  const needToggle   = items.length > 5;
+  const needToggle = items.length > 5;
   const nextSignature = buildSearchSignature(items, showAllSearchResults);
   if (lastRenderedSearchSignature === nextSignature) return;
 
@@ -1076,7 +1125,7 @@ function toggleOverlayDropdown(dropdownElement, isOpenState) {
   const nextState = !isOpenState;
   dropdownElement.classList.toggle('open', nextState);
   if (nextState) {
-    if (dropdownElement !== overlayPlayerDropdown)  overlayPlayerDropdown?.classList.remove('open');
+    if (dropdownElement !== overlayPlayerDropdown) overlayPlayerDropdown?.classList.remove('open');
     if (dropdownElement !== overlayEpisodeDropdown) overlayEpisodeDropdown?.classList.remove('open');
   }
   return nextState;
@@ -1099,7 +1148,7 @@ async function fetchSearchResults(rawQuery, token) {
   activeSearchAbortController = new AbortController();
 
   const queryString = `q=${encodeURIComponent(rawQuery)}`;
-  const endpoints   = SEARCH_ENDPOINTS.map(base => `${base}?${queryString}`);
+  const endpoints = SEARCH_ENDPOINTS.map(base => `${base}?${queryString}`);
 
   const data = await fetchJsonFallback(endpoints, {
     signal: activeSearchAbortController.signal,
@@ -1118,7 +1167,7 @@ async function fetchSearchResults(rawQuery, token) {
 }
 
 async function triggerSearchNow(rawQuery) {
-  const value      = String(rawQuery || '').trim();
+  const value = String(rawQuery || '').trim();
   const normalized = normalizeSearchQuery(value);
   if (!value || normalized.length < SEARCH_MIN_LENGTH) return;
   if (!canControl()) return;
@@ -1140,7 +1189,7 @@ async function triggerSearchNow(rawQuery) {
 
 function reopenSearchDropdownFromInput() {
   if (!searchInput || !canControl()) return;
-  const rawQuery      = String(searchInput.value || '').trim();
+  const rawQuery = String(searchInput.value || '').trim();
   const normalizedQuery = normalizeSearchQuery(rawQuery);
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) return;
 
@@ -1162,12 +1211,15 @@ function reopenSearchDropdownFromInput() {
 }
 
 const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
-  const rawQuery        = String(query || '').trim();
+  const rawQuery = String(query || '').trim();
   const normalizedQuery = normalizeSearchQuery(rawQuery);
 
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) {
     latestSearchToken += 1;
-    if (activeSearchAbortController) { activeSearchAbortController.abort(); activeSearchAbortController = null; }
+    if (activeSearchAbortController) {
+      activeSearchAbortController.abort();
+      activeSearchAbortController = null;
+    }
     lastSearchResults = [];
     lastSearchQueryNormalized = '';
     showAllSearchResults = false;
@@ -1192,8 +1244,6 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
     clearSearchResultsUi();
   }
 }, SEARCH_DEBOUNCE_MS);
-
-// ─── Выбор аниме ──────────────────────────────────────────────────────────────
 
 async function selectAnime(item) {
   if (!item || !canControl()) return;
@@ -1244,11 +1294,13 @@ async function selectAnime(item) {
   }
 }
 
-// ─── Никнейм ──────────────────────────────────────────────────────────────────
-
 function saveNickname() {
   const newUsername = sanitizeUsername(nicknameInput?.value);
-  if (!newUsername) { alert('Введите ник'); nicknameInput?.focus(); return; }
+  if (!newUsername) {
+    alert('Введите ник');
+    nicknameInput?.focus();
+    return;
+  }
 
   const oldUsername = username;
   username = newUsername;
@@ -1263,12 +1315,10 @@ function saveNickname() {
   }
 }
 
-// ─── Users render ─────────────────────────────────────────────────────────────
-
 function getDisplayedUserTime(user) {
   const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
   if (!hasTime) return null;
-  const baseTime  = Number(user.currentTime) || 0;
+  const baseTime = Number(user.currentTime) || 0;
   const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
   if (!updatedAt) return baseTime;
   const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
@@ -1286,7 +1336,7 @@ function renderUsers(users) {
 
   usersList.innerHTML = latestRoomUsers.map(user => {
     const displayTime = getDisplayedUserTime(user);
-    const timeText    = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '—:—';
+    const timeText = typeof displayTime === 'number' ? formatWatchTime(displayTime) : '—:—';
     return `
       <div class="user-item">
         <div class="user-main">
@@ -1305,8 +1355,6 @@ function startUsersRenderTicker() {
   if (usersRenderTicker) clearInterval(usersRenderTicker);
   usersRenderTicker = setInterval(() => renderUsers(), 1000);
 }
-
-// ─── Socket events ────────────────────────────────────────────────────────────
 
 socket.on('connect', () => {
   if (roomId !== 'solo') {
@@ -1336,7 +1384,10 @@ socket.on('you-are-host', () => {
   stopDriftCheck();
 
   if (currentState.embedUrl) startHostTimers();
-  if (!hasShownHostMessage) { sys('Вы хост комнаты'); hasShownHostMessage = true; }
+  if (!hasShownHostMessage) {
+    sys('Вы хост комнаты');
+    hasShownHostMessage = true;
+  }
 });
 
 socket.on('sync-state', (state) => {
@@ -1392,7 +1443,7 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
 
   const newPaused = typeof paused === 'boolean' ? paused : action === 'pause';
 
-  lastKnownHostTime   = safeTime ?? 0;
+  lastKnownHostTime = safeTime ?? 0;
   lastKnownHostTimeAt = Date.now();
 
   currentState.playback = {
@@ -1400,6 +1451,10 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
     currentTime: safeTime ?? 0,
     updatedAt: Number(updatedAt || Date.now()) || Date.now()
   };
+
+  if (action === 'timeupdate' || action === 'seek') {
+    emitCurrentUserTime();
+  }
 
   const now = Date.now();
 
@@ -1429,8 +1484,6 @@ socket.on('chat-message', ({ username: author, message, time }) => {
   if (!isSelfMessage) playChatSound();
 });
 
-// ─── DOM event listeners ──────────────────────────────────────────────────────
-
 window.addEventListener('pointerdown', () => {
   userInteractedWithPlayer = true;
   hideViewerHintOverlay();
@@ -1444,7 +1497,7 @@ window.addEventListener('keydown', () => {
 });
 
 document.addEventListener('click', (event) => {
-  const withinSearch  = event.target.closest('.anime-search-section, .center-search-panel');
+  const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
   if (!withinSearch) animeList?.classList.remove('visible');
 
   const withinOverlay = event.target.closest('.player-top-overlay');
@@ -1454,7 +1507,7 @@ document.addEventListener('click', (event) => {
 overlayPlayerBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!canControl()) return;
-  isOverlayPlayerOpen  = toggleOverlayDropdown(overlayPlayerDropdown, isOverlayPlayerOpen);
+  isOverlayPlayerOpen = toggleOverlayDropdown(overlayPlayerDropdown, isOverlayPlayerOpen);
   isOverlayEpisodeOpen = false;
 });
 
@@ -1462,7 +1515,7 @@ overlayEpisodeBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!canControl()) return;
   isOverlayEpisodeOpen = toggleOverlayDropdown(overlayEpisodeDropdown, isOverlayEpisodeOpen);
-  isOverlayPlayerOpen  = false;
+  isOverlayPlayerOpen = false;
 });
 
 if (copyLinkBtn) {
@@ -1494,7 +1547,9 @@ document.addEventListener('keydown', (event) => {
 if (saveNicknameBtn) saveNicknameBtn.addEventListener('click', saveNickname);
 
 if (nicknameInput) {
-  nicknameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveNickname(); });
+  nicknameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveNickname();
+  });
 }
 
 if (sendBtn && chatInput) {
@@ -1515,7 +1570,9 @@ if (sendBtn && chatInput) {
     chatInput.focus();
   });
 
-  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendBtn.click(); });
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
 }
 
 if (searchInput) {
@@ -1535,11 +1592,15 @@ window.addEventListener('beforeunload', () => {
   stopHostTimers();
   stopUserTimeTimer();
   stopDriftCheck();
-  if (usersRenderTicker) { clearInterval(usersRenderTicker); usersRenderTicker = null; }
-  if (activeSearchAbortController) { activeSearchAbortController.abort(); activeSearchAbortController = null; }
+  if (usersRenderTicker) {
+    clearInterval(usersRenderTicker);
+    usersRenderTicker = null;
+  }
+  if (activeSearchAbortController) {
+    activeSearchAbortController.abort();
+    activeSearchAbortController = null;
+  }
 });
-
-// ─── Инициализация ────────────────────────────────────────────────────────────
 
 updateControlState();
 updateSelectedAnimeInfoContent(null);

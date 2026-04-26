@@ -922,6 +922,20 @@ function getLastEpisode(item) {
   return Number(item?.last_episode || item?.material_data?.last_episode || 0);
 }
 
+function getReleaseTimestamp(item) {
+  const rawDate =
+    item?.material_data?.anime_release_date ||
+    item?.material_data?.release_date ||
+    item?.material_data?.aired_at ||
+    item?.material_data?.next_episode_at ||
+    null;
+
+  if (!rawDate) return 0;
+
+  const ts = Date.parse(String(rawDate));
+  return Number.isFinite(ts) ? ts : 0;
+}
+
 function getStableAnimeId(item) {
   const shikimoriId = getShikimoriId(item);
   const kodikId = getKodikId(item);
@@ -933,7 +947,6 @@ function getStableAnimeId(item) {
 
 function normalizeTitleKey(value) {
   return normalizeSearchText(value)
-    .replace(/\b(tv|тв|movie|film|ova|ona|special|sp)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -1157,9 +1170,22 @@ function makeSearchItem(item, queryVariants, normalizedQuery) {
     type: normalizeType(item),
     shikimoriId: getShikimoriId(item),
     kodikId: getKodikId(item),
+    releaseTs: getReleaseTimestamp(item),
     score: titleScore(item, queryVariants, normalizedQuery),
     serialPriority: isSerial(item) ? 1 : 0
   };
+}
+
+function hasStrongTitleMatch(candidate, queryKey) {
+  const safeCandidate = normalizeTitleKey(candidate);
+  const safeQuery = normalizeTitleKey(queryKey);
+
+  if (!safeCandidate || !safeQuery) return false;
+  if (safeCandidate === safeQuery) return true;
+  if (safeCandidate.startsWith(safeQuery) || safeQuery.startsWith(safeCandidate)) return true;
+  if (safeQuery.length >= 4 && safeCandidate.includes(safeQuery)) return true;
+
+  return false;
 }
 
 function dedupeSearchResults(items, queryVariants) {
@@ -1173,18 +1199,18 @@ function dedupeSearchResults(items, queryVariants) {
 
     const itemKey = item.titleKey || normalizeTitleKey(item.title);
     const year = String(item.year || '');
-    const groupKey = `${itemKey}|${year}`;
+    const typeKey = normalizeSearchText(item.type || '');
+    const groupKey = item.shikimoriId
+      ? `shikimori:${item.shikimoriId}`
+      : item.kodikId
+        ? `kodik:${item.kodikId}`
+        : `${itemKey}|${year}|${typeKey}`;
 
     const goodMatch = titleCandidates.some(candidate =>
-      queryVariantKeys.some(queryKey =>
-        candidate === queryKey ||
-        candidate.startsWith(queryKey) ||
-        candidate.includes(queryKey) ||
-        queryKey.startsWith(candidate)
-      )
+      queryVariantKeys.some(queryKey => hasStrongTitleMatch(candidate, queryKey))
     );
 
-    if (!goodMatch && item.score < 1200) continue;
+    if (!goodMatch && item.score < 1800) continue;
 
     const existing = strictMap.get(groupKey);
     if (!existing) {
@@ -1258,13 +1284,15 @@ function compareSearchItemsStrictOrder(a, b) {
     return (a.matchPriority || 9) - (b.matchPriority || 9);
   }
 
-  if ((b.serialPriority || 0) !== (a.serialPriority || 0)) {
-    return (b.serialPriority || 0) - (a.serialPriority || 0);
+  const releaseA = Number(a.releaseTs) || 0;
+  const releaseB = Number(b.releaseTs) || 0;
+  if (releaseA && releaseB && releaseA !== releaseB) {
+    return releaseA - releaseB;
   }
 
   const yearA = Number(a.year) || 0;
   const yearB = Number(b.year) || 0;
-  if (yearA !== yearB) return yearB - yearA;
+  if (yearA !== yearB) return yearA - yearB;
 
   const tvA = extractTvOrderIndexFromTitle(a.title);
   const tvB = extractTvOrderIndexFromTitle(b.title);
@@ -1639,11 +1667,7 @@ async function handleKodikSearch(req, res) {
 
     rawResults = rawResults.filter(item => {
       const type = String(normalizeType(item) || '').toLowerCase();
-      if (!type.includes('anime')) return false;
-      if (type.includes('ova')) return false;
-      if (type.includes('ona')) return false;
-      if (type.includes('special')) return false;
-      return true;
+      return type.includes('anime');
     });
 
     const mapped = rawResults
@@ -1659,7 +1683,7 @@ async function handleKodikSearch(req, res) {
     deduped.sort(compareSearchItemsStrictOrder);
 
     const finalResults = deduped
-      .filter(item => item.score >= 1400 || item.matchPriority <= 2)
+      .filter(item => item.matchPriority <= 3 && (item.score >= 1200 || Number(item.year) > 0))
       .slice(0, 24);
 
     setCachedSearch(normalizedQuery, finalResults);
