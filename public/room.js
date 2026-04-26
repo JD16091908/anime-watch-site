@@ -565,7 +565,11 @@ function emitCurrentUserTime() {
 
   const ct = getEffectivePlaybackTime(currentState.playback);
   if (typeof ct === 'number' && ct >= 0) {
-    socket.emit('update-user-time', { roomId, currentTime: ct });
+    socket.emit('update-user-time', {
+      roomId,
+      currentTime: ct,
+      paused: !!currentState.playback.paused
+    });
   }
 }
 
@@ -606,18 +610,20 @@ window.addEventListener('player:duration-update', (e) => {
 });
 
 window.addEventListener('player:play', () => {
-  if (!isHost || roomId === 'solo') return;
   currentState.playback.paused = false;
   currentState.playback.updatedAt = Date.now();
+
+  if (!isHost || roomId === 'solo') return;
   socket.emit('player-control', {
     roomId, action: 'play', currentTime: currentState.playback.currentTime
   });
 });
 
 window.addEventListener('player:pause', () => {
-  if (!isHost || roomId === 'solo') return;
   currentState.playback.paused = true;
   currentState.playback.updatedAt = Date.now();
+
+  if (!isHost || roomId === 'solo') return;
   socket.emit('player-control', {
     roomId, action: 'pause', currentTime: currentState.playback.currentTime
   });
@@ -1113,7 +1119,8 @@ function renderAnimeResults(items) {
   if (toggleBtn) {
     toggleBtn.disabled = !canControl();
 
-    toggleBtn.addEventListener('mousedown', (event) => {
+    toggleBtn.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
       event.stopPropagation();
     });
 
@@ -1203,19 +1210,15 @@ function reopenSearchDropdownFromInput() {
   const rawQuery = String(searchInput.value || '').trim();
   const normalizedQuery = normalizeSearchQuery(rawQuery);
 
-  if ((!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) && lastSearchResults.length) {
-    renderAnimeResults(lastSearchResults);
-    if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
-    return;
+  if (lastSearchResults.length) {
+    if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH || lastSearchQueryNormalized === normalizedQuery) {
+      renderAnimeResults(lastSearchResults);
+      if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
+      return;
+    }
   }
 
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) return;
-
-  if (lastSearchResults.length && lastSearchQueryNormalized === normalizedQuery) {
-    renderAnimeResults(lastSearchResults);
-    if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
-    return;
-  }
 
   const cached = getClientCachedSearch(normalizedQuery);
   if (cached && cached.length) {
@@ -1337,7 +1340,15 @@ function saveNickname() {
 function getDisplayedUserTime(user) {
   const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
   if (!hasTime) return null;
-  return Math.max(0, Number(user.currentTime) || 0);
+
+  const baseTime = Number(user.currentTime) || 0;
+  const paused = !!user?.playbackPaused;
+  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
+
+  if (paused || !updatedAt) return baseTime;
+
+  const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
+  return baseTime + elapsed;
 }
 
 function renderUsers(users) {

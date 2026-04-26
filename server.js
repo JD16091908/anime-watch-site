@@ -1050,38 +1050,8 @@ function calcSingleTitleScore(normalizedTitle, queryVariants, normalizedQuery) {
   return score;
 }
 
-function scoreShikimoriAnimeCandidate(anime, queryVariants, normalizedQuery) {
-  const titles = [
-    anime?.russian,
-    anime?.name
-  ].filter(Boolean);
-
-  let score = 0;
-  for (const title of titles) {
-    score = Math.max(score, calcSingleTitleScore(title, queryVariants, normalizedQuery));
-  }
-  return score;
-}
-
 function isLatinText(value) {
   return /[a-z]/i.test(String(value || ''));
-}
-
-function pickShikimoriSearchTerm(expandedQueries, normalizedQuery) {
-  const pool = dedupeArray([normalizedQuery, ...(expandedQueries || [])])
-    .map(q => String(q || '').trim())
-    .filter(q => q.length >= 2);
-
-  if (!pool.length) return null;
-
-  const latinCandidates = pool.filter(isLatinText);
-  if (latinCandidates.length) {
-    latinCandidates.sort((a, b) => b.length - a.length);
-    return latinCandidates[0] || null;
-  }
-
-  pool.sort((a, b) => b.length - a.length);
-  return pool[0] || null;
 }
 
 function primaryQueryPriority(q, normalizedQuery) {
@@ -1244,53 +1214,6 @@ function extractTvOrderIndexFromTitle(title) {
   if (!m) return 0;
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : 0;
-}
-
-const FRANCHISE_STOP_TOKENS = new Set([
-  'anime', 'аниме', 'season', 'сезон', 'sezon', 'tv', 'тв', 'ova', 'ona', 'film', 'movie',
-  'фильм', 'полнометражный', 'special', 'specials', 'спешл', 'спецвыпуск',
-  'part', 'часть', 'episode', 'серия', 'серии', 'shippuden', 'shippuuden'
-]);
-
-function collectFranchiseCoreTokens(normalizedQuery, expandedQueries = []) {
-  const all = dedupeArray([normalizedQuery, ...(expandedQueries || [])])
-    .map(v => normalizeSearchText(v))
-    .filter(Boolean);
-
-  const tokenSet = new Set();
-
-  for (const q of all) {
-    const tokens = tokenizeSearchText(q);
-    for (const token of tokens) {
-      if (!token) continue;
-      if (token.length < 3) continue;
-      if (FRANCHISE_STOP_TOKENS.has(token)) continue;
-      if (/^\d+$/.test(token)) continue;
-      tokenSet.add(token);
-    }
-  }
-
-  return [...tokenSet];
-}
-
-function titleHasCoreFranchiseToken(item, coreTokens = []) {
-  if (!coreTokens.length) return true;
-
-  const titleTokens = new Set(
-    [item?.title, ...(item?.altTitles || [])]
-      .flatMap(title => tokenizeSearchText(title))
-      .filter(Boolean)
-  );
-
-  return coreTokens.some(token => {
-    if (titleTokens.has(token)) return true;
-
-    for (const tt of titleTokens) {
-      if (tt.startsWith(token) || token.startsWith(tt)) return true;
-    }
-
-    return false;
-  });
 }
 
 function getMatchPriority(item, normalizedQuery, expandedQueries = []) {
@@ -1474,15 +1397,16 @@ function mergeEpisodes(items) {
 
 function strictMatchResults(items, selected) {
   const selectedTitle = normalizeSearchText(selected?.title);
+  const selectedYear = String(selected?.year || '');
   const selectedShikimori = String(selected?.shikimoriId || '');
   const selectedKodik = String(selected?.kodikId || '');
   const selectedVariants = expandQueryVariants(selectedTitle);
-  const coreFranchiseTokens = collectFranchiseCoreTokens(selectedTitle, selectedVariants);
 
   let filtered = items.filter(item => {
     if (!isAllowedAnimeType(item)) return false;
 
     const itemTitles = getAllTitles(item).map(normalizeSearchText);
+    const itemYear = String(normalizeYear(item) || '');
     const itemShikimori = String(getShikimoriId(item) || '');
     const itemKodik = String(getKodikId(item) || '');
 
@@ -1490,7 +1414,7 @@ function strictMatchResults(items, selected) {
       (selectedShikimori && itemShikimori === selectedShikimori) ||
       (selectedKodik && itemKodik === selectedKodik);
 
-    const titleVariantMatch =
+    const titleMatch =
       selectedVariants.length &&
       itemTitles.some(itemTitle =>
         selectedVariants.some(selectedVariant =>
@@ -1500,22 +1424,22 @@ function strictMatchResults(items, selected) {
         )
       );
 
-    const franchiseTokenMatch = titleHasCoreFranchiseToken(
-      { title: normalizeTitle(item), altTitles: getAllTitles(item) },
-      coreFranchiseTokens
-    );
+    const yearMatch = !selectedYear || itemYear === selectedYear;
 
-    return idMatch || (titleVariantMatch && franchiseTokenMatch);
+    return (idMatch || titleMatch) && yearMatch;
   });
 
   if (filtered.length > 0) return filtered;
 
   filtered = items.filter(item => {
-    const franchiseTokenMatch = titleHasCoreFranchiseToken(
-      { title: normalizeTitle(item), altTitles: getAllTitles(item) },
-      coreFranchiseTokens
+    const itemTitles = getAllTitles(item).map(normalizeSearchText);
+    return selectedVariants.length && itemTitles.some(itemTitle =>
+      selectedVariants.some(selectedVariant =>
+        itemTitle === selectedVariant ||
+        itemTitle.includes(selectedVariant) ||
+        selectedVariant.includes(itemTitle)
+      )
     );
-    return franchiseTokenMatch;
   });
 
   return filtered;
@@ -1726,21 +1650,20 @@ async function handleKodikSearch(req, res) {
         matchPriority: getMatchPriority(item, normalizedQuery, expandedQueries)
       }));
 
-    deduped.sort(compareSearchItemsStrictOrder);
+    const queryTokens = tokenizeSearchText(normalizedQuery).filter(t => t.length >= 3);
 
-    const coreFranchiseTokens = collectFranchiseCoreTokens(normalizedQuery, expandedQueries);
+    const finalResults = deduped
+      .filter(item => {
+        if (item.matchPriority > 4) return false;
+        if (item.score < 900 && !Number(item.year)) return false;
 
-    const strictFranchise = deduped.filter(item =>
-      item.matchPriority <= 3 &&
-      (item.score >= 1200 || Number(item.year) > 0) &&
-      titleHasCoreFranchiseToken(item, coreFranchiseTokens)
-    );
+        if (!queryTokens.length) return true;
+        const haystack = normalizeSearchText([item.title, ...(item.altTitles || [])].join(' '));
 
-    const basePool = strictFranchise.length >= 4
-      ? strictFranchise
-      : deduped.filter(item => item.matchPriority <= 3 && (item.score >= 1200 || Number(item.year) > 0));
-
-    const finalResults = basePool.slice(0, 24);
+        return queryTokens.some(token => haystack.includes(token));
+      })
+      .sort(compareSearchItemsStrictOrder)
+      .slice(0, 60);
 
     setCachedSearch(normalizedQuery, finalResults);
     return res.json(finalResults);
@@ -2055,6 +1978,7 @@ io.on('connection', (socket) => {
       userKey,
       username: socket.data.username,
       currentTime: null,
+      playbackPaused: true,
       timeUpdatedAt: 0
     });
 
@@ -2116,6 +2040,7 @@ io.on('connection', (socket) => {
     room.users = room.users.map(user => ({
       ...user,
       currentTime: null,
+      playbackPaused: true,
       timeUpdatedAt: 0
     }));
 
@@ -2180,13 +2105,13 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('update-user-time', ({ roomId, currentTime }) => {
+  socket.on('update-user-time', ({ roomId, currentTime, paused }) => {
     const safeRoomId = sanitizeRoomId(roomId);
     const room = rooms[safeRoomId];
     if (!room) return;
 
     const now = Date.now();
-    if (now - socket.data.lastUserTimeEmitAt < 1000) return;
+    if (now - socket.data.lastUserTimeEmitAt < 500) return;
     socket.data.lastUserTimeEmitAt = now;
 
     const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) && currentTime >= 0
@@ -2196,10 +2121,11 @@ io.on('connection', (socket) => {
     const user = room.users.find(u => u.id === socket.id);
     if (!user) return;
 
-    user.currentTime = safeTime === null ? null : Math.max(0, Math.floor(safeTime));
+    user.currentTime = safeTime;
+    user.playbackPaused = !!paused;
     user.timeUpdatedAt = now;
-    touchRoom(room);
 
+    touchRoom(room);
     io.to(safeRoomId).emit('room-users', getUsersWithMeta(safeRoomId));
   });
 
