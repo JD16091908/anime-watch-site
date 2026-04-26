@@ -3,7 +3,6 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const dns = require('dns').promises;
-const crypto = require('crypto');
 const geoip = require('geoip-lite');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -1250,31 +1249,42 @@ function getMatchPriority(item, normalizedQuery, expandedQueries = []) {
 }
 
 function compareSearchItemsStrictOrder(a, b) {
-  if ((a.matchPriority || 9) !== (b.matchPriority || 9)) {
-    return (a.matchPriority || 9) - (b.matchPriority || 9);
+  const safePriorityA = Number.isFinite(Number(a?.matchPriority)) ? Number(a.matchPriority) : 9;
+  const safePriorityB = Number.isFinite(Number(b?.matchPriority)) ? Number(b.matchPriority) : 9;
+
+  if (safePriorityA !== safePriorityB) {
+    return safePriorityA - safePriorityB;
   }
 
-  const releaseA = Number(a.releaseTs) || 0;
-  const releaseB = Number(b.releaseTs) || 0;
-  if (releaseA && releaseB && releaseA !== releaseB) {
-    return releaseA - releaseB;
+  const releaseA = Number(a?.releaseTs) || 0;
+  const releaseB = Number(b?.releaseTs) || 0;
+  if (releaseA || releaseB) {
+    if (!releaseA) return 1;
+    if (!releaseB) return -1;
+    if (releaseA !== releaseB) return releaseA - releaseB;
   }
 
-  const yearA = Number(a.year) || 0;
-  const yearB = Number(b.year) || 0;
-  if (yearA !== yearB) return yearA - yearB;
+  const yearA = Number(a?.year) || 0;
+  const yearB = Number(b?.year) || 0;
+  if (yearA || yearB) {
+    if (!yearA) return 1;
+    if (!yearB) return -1;
+    if (yearA !== yearB) return yearA - yearB;
+  }
 
-  const tvA = extractTvOrderIndexFromTitle(a.title);
-  const tvB = extractTvOrderIndexFromTitle(b.title);
+  const tvA = extractTvOrderIndexFromTitle(a?.title);
+  const tvB = extractTvOrderIndexFromTitle(b?.title);
   if (tvA !== tvB) {
     if (!tvA) return 1;
     if (!tvB) return -1;
     return tvA - tvB;
   }
 
-  if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+  const scoreA = Number(a?.score) || 0;
+  const scoreB = Number(b?.score) || 0;
+  if (scoreB !== scoreA) return scoreB - scoreA;
 
-  return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
+  return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
 }
 
 function buildEpisodeIframe(link) {
