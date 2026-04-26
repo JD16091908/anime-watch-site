@@ -1246,6 +1246,53 @@ function extractTvOrderIndexFromTitle(title) {
   return Number.isFinite(n) ? n : 0;
 }
 
+const FRANCHISE_STOP_TOKENS = new Set([
+  'anime', 'аниме', 'season', 'сезон', 'sezon', 'tv', 'тв', 'ova', 'ona', 'film', 'movie',
+  'фильм', 'полнометражный', 'special', 'specials', 'спешл', 'спецвыпуск',
+  'part', 'часть', 'episode', 'серия', 'серии', 'shippuden', 'shippuuden'
+]);
+
+function collectFranchiseCoreTokens(normalizedQuery, expandedQueries = []) {
+  const all = dedupeArray([normalizedQuery, ...(expandedQueries || [])])
+    .map(v => normalizeSearchText(v))
+    .filter(Boolean);
+
+  const tokenSet = new Set();
+
+  for (const q of all) {
+    const tokens = tokenizeSearchText(q);
+    for (const token of tokens) {
+      if (!token) continue;
+      if (token.length < 3) continue;
+      if (FRANCHISE_STOP_TOKENS.has(token)) continue;
+      if (/^\d+$/.test(token)) continue;
+      tokenSet.add(token);
+    }
+  }
+
+  return [...tokenSet];
+}
+
+function titleHasCoreFranchiseToken(item, coreTokens = []) {
+  if (!coreTokens.length) return true;
+
+  const titleTokens = new Set(
+    [item?.title, ...(item?.altTitles || [])]
+      .flatMap(title => tokenizeSearchText(title))
+      .filter(Boolean)
+  );
+
+  return coreTokens.some(token => {
+    if (titleTokens.has(token)) return true;
+
+    for (const tt of titleTokens) {
+      if (tt.startsWith(token) || token.startsWith(tt)) return true;
+    }
+
+    return false;
+  });
+}
+
 function getMatchPriority(item, normalizedQuery, expandedQueries = []) {
   const variants = dedupeArray([normalizedQuery, ...(expandedQueries || [])])
     .map(v => normalizeSearchText(v))
@@ -1427,16 +1474,15 @@ function mergeEpisodes(items) {
 
 function strictMatchResults(items, selected) {
   const selectedTitle = normalizeSearchText(selected?.title);
-  const selectedYear = String(selected?.year || '');
   const selectedShikimori = String(selected?.shikimoriId || '');
   const selectedKodik = String(selected?.kodikId || '');
   const selectedVariants = expandQueryVariants(selectedTitle);
+  const coreFranchiseTokens = collectFranchiseCoreTokens(selectedTitle, selectedVariants);
 
   let filtered = items.filter(item => {
     if (!isAllowedAnimeType(item)) return false;
 
     const itemTitles = getAllTitles(item).map(normalizeSearchText);
-    const itemYear = String(normalizeYear(item) || '');
     const itemShikimori = String(getShikimoriId(item) || '');
     const itemKodik = String(getKodikId(item) || '');
 
@@ -1444,7 +1490,7 @@ function strictMatchResults(items, selected) {
       (selectedShikimori && itemShikimori === selectedShikimori) ||
       (selectedKodik && itemKodik === selectedKodik);
 
-    const titleMatch =
+    const titleVariantMatch =
       selectedVariants.length &&
       itemTitles.some(itemTitle =>
         selectedVariants.some(selectedVariant =>
@@ -1454,22 +1500,22 @@ function strictMatchResults(items, selected) {
         )
       );
 
-    const yearMatch = !selectedYear || itemYear === selectedYear;
+    const franchiseTokenMatch = titleHasCoreFranchiseToken(
+      { title: normalizeTitle(item), altTitles: getAllTitles(item) },
+      coreFranchiseTokens
+    );
 
-    return (idMatch || titleMatch) && yearMatch;
+    return idMatch || (titleVariantMatch && franchiseTokenMatch);
   });
 
   if (filtered.length > 0) return filtered;
 
   filtered = items.filter(item => {
-    const itemTitles = getAllTitles(item).map(normalizeSearchText);
-    return selectedVariants.length && itemTitles.some(itemTitle =>
-      selectedVariants.some(selectedVariant =>
-        itemTitle === selectedVariant ||
-        itemTitle.includes(selectedVariant) ||
-        selectedVariant.includes(itemTitle)
-      )
+    const franchiseTokenMatch = titleHasCoreFranchiseToken(
+      { title: normalizeTitle(item), altTitles: getAllTitles(item) },
+      coreFranchiseTokens
     );
+    return franchiseTokenMatch;
   });
 
   return filtered;
@@ -1682,9 +1728,19 @@ async function handleKodikSearch(req, res) {
 
     deduped.sort(compareSearchItemsStrictOrder);
 
-    const finalResults = deduped
-      .filter(item => item.matchPriority <= 3 && (item.score >= 1200 || Number(item.year) > 0))
-      .slice(0, 24);
+    const coreFranchiseTokens = collectFranchiseCoreTokens(normalizedQuery, expandedQueries);
+
+    const strictFranchise = deduped.filter(item =>
+      item.matchPriority <= 3 &&
+      (item.score >= 1200 || Number(item.year) > 0) &&
+      titleHasCoreFranchiseToken(item, coreFranchiseTokens)
+    );
+
+    const basePool = strictFranchise.length >= 4
+      ? strictFranchise
+      : deduped.filter(item => item.matchPriority <= 3 && (item.score >= 1200 || Number(item.year) > 0));
+
+    const finalResults = basePool.slice(0, 24);
 
     setCachedSearch(normalizedQuery, finalResults);
     return res.json(finalResults);
@@ -2140,7 +2196,7 @@ io.on('connection', (socket) => {
     const user = room.users.find(u => u.id === socket.id);
     if (!user) return;
 
-    user.currentTime = safeTime;
+    user.currentTime = safeTime === null ? null : Math.max(0, Math.floor(safeTime));
     user.timeUpdatedAt = now;
     touchRoom(room);
 

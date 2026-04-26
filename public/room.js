@@ -1112,10 +1112,20 @@ function renderAnimeResults(items) {
   const toggleBtn = document.getElementById('searchResultsToggleBtn');
   if (toggleBtn) {
     toggleBtn.disabled = !canControl();
-    toggleBtn.addEventListener('click', () => {
+
+    toggleBtn.addEventListener('mousedown', (event) => {
+      event.stopPropagation();
+    });
+
+    toggleBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
       showAllSearchResults = !showAllSearchResults;
       lastRenderedSearchSignature = '';
       renderAnimeResults(lastSearchResults);
+
+      animeList?.classList.add('visible');
     });
   }
 }
@@ -1189,12 +1199,21 @@ async function triggerSearchNow(rawQuery) {
 
 function reopenSearchDropdownFromInput() {
   if (!searchInput || !canControl()) return;
+
   const rawQuery = String(searchInput.value || '').trim();
   const normalizedQuery = normalizeSearchQuery(rawQuery);
+
+  if ((!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) && lastSearchResults.length) {
+    renderAnimeResults(lastSearchResults);
+    if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
+    return;
+  }
+
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) return;
 
   if (lastSearchResults.length && lastSearchQueryNormalized === normalizedQuery) {
     renderAnimeResults(lastSearchResults);
+    if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
     return;
   }
 
@@ -1318,11 +1337,7 @@ function saveNickname() {
 function getDisplayedUserTime(user) {
   const hasTime = typeof user?.currentTime === 'number' && !Number.isNaN(user.currentTime);
   if (!hasTime) return null;
-  const baseTime = Number(user.currentTime) || 0;
-  const updatedAt = Number(user.timeUpdatedAt || 0) || 0;
-  if (!updatedAt) return baseTime;
-  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
-  return baseTime + diffSeconds;
+  return Math.max(0, Number(user.currentTime) || 0);
 }
 
 function renderUsers(users) {
