@@ -1,13 +1,8 @@
-/* FIX 1: На мобильных global style.css делает .small-btn { width:100% }.
-   Это ломает шапку комнаты. Здесь мы аккуратно переопределяем только в .top-bar. */
 @media (max-width: 768px) {
   .top-bar .small-btn {
     width: auto;
   }
-}
 
-/* FIX 2: Аккуратная шапка комнаты на мобильных (без "мешанины") */
-@media (max-width: 768px) {
   .top-bar {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -17,6 +12,7 @@
       "cinema support";
     gap: 10px;
     height: auto;
+    min-height: 0;
     padding: 10px;
     align-items: center;
   }
@@ -26,7 +22,6 @@
     min-width: 0;
   }
 
-  /* Делаем детей .top-actions участниками grid */
   .top-actions {
     display: contents;
   }
@@ -66,7 +61,6 @@
   }
 }
 
-/* FIX 3: На мобильных iframe обрезается из-за inline minHeight:520px в player.js */
 .player-wrapper iframe {
   min-height: 0 !important;
   height: 100% !important;
