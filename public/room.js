@@ -162,6 +162,8 @@ let lastSearchQueryNormalized = '';
 let activeSearchAbortController = null;
 let lastRenderedSearchSignature = '';
 let lastUserTimeEmitAtClient = 0;
+let currentLoadedEmbedUrl = null;
+
 const clientSearchCache = new Map();
 
 let isOverlayPlayerOpen = false;
@@ -634,6 +636,7 @@ function startRequestSyncTimer() {
 
   requestSyncTimer = setInterval(() => {
     if (!socket.connected) return;
+    if (isHost) return;
     socket.emit('request-sync', { roomId });
   }, REQUEST_SYNC_INTERVAL);
 }
@@ -858,11 +861,13 @@ function updateSelectedAnimeInfoContent(anime = null) {
 function showPlaceholderUi(title = 'Ничего не выбрано', description = 'Выберите аниме') {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper || !window.PlayerModule) return;
+  currentLoadedEmbedUrl = null;
   window.PlayerModule.showPlaceholder(playerWrapper, { title, description });
 }
 
 function showBlockedAnimeMessage(message = 'Данное аниме запрещено на территории вашей страны') {
   selectedAnime = null;
+  currentLoadedEmbedUrl = null;
 
   currentState = {
     animeId: null,
@@ -946,6 +951,7 @@ function loadIframe(embedUrl) {
   if (!playerWrapper || !window.PlayerModule) return;
 
   if (!embedUrl) {
+    currentLoadedEmbedUrl = null;
     showPlaceholderUi('Серия не запущена', 'У выбранного тайтла отсутствует iframe');
     return;
   }
@@ -960,7 +966,6 @@ function loadIframe(embedUrl) {
   lastAppliedTargetTime = null;
   lastAppliedAt = 0;
   lastForcedSyncAt = 0;
-  pendingPlaybackApply = null;
   lastUserTimeEmitAtClient = 0;
 
   const preservedOverlay = detachPlayerOverlayFromWrapper(playerWrapper);
@@ -969,6 +974,8 @@ function loadIframe(embedUrl) {
     src: embedUrl,
     title: currentState.title
   });
+
+  currentLoadedEmbedUrl = embedUrl;
 
   attachPlayerOverlayToWrapper(playerWrapper, preservedOverlay);
 
@@ -991,12 +998,6 @@ function loadIframe(embedUrl) {
     showFirstEpisodeHintForHost();
   } else if (roomId !== 'solo') {
     startDriftCheck();
-  }
-
-  if (pendingPlaybackApply) {
-    const pb = pendingPlaybackApply;
-    pendingPlaybackApply = null;
-    setTimeout(() => applyPlaybackState(pb, { force: true, reason: 'pending' }), 800);
   }
 
   setTimeout(() => {
@@ -1147,6 +1148,7 @@ function launchEpisode(episode, anime) {
   selectedPlayer = playerName;
   hasShownFirstEpisodeHint = false;
   userInteractedWithPlayer = true;
+  pendingPlaybackApply = null;
 
   loadIframe(embedUrl);
   renderOverlayControls();
@@ -1674,6 +1676,8 @@ socket.on('you-are-host', () => {
 });
 
 socket.on('sync-state', (state) => {
+  const nextEmbedUrl = state.embedUrl ?? null;
+
   isHost = !!state.isHost;
 
   if (window.PlayerModule) window.PlayerModule.setHostState(isHost);
@@ -1690,7 +1694,7 @@ socket.on('sync-state', (state) => {
     animeId: state.animeId ?? null,
     animeUrl: state.animeUrl ?? null,
     episodeNumber: state.episodeNumber ?? null,
-    embedUrl: state.embedUrl ?? null,
+    embedUrl: nextEmbedUrl,
     title: state.title ?? null,
     duration: currentState.duration || 0,
     playback
@@ -1701,24 +1705,39 @@ socket.on('sync-state', (state) => {
     lastKnownHostTimeAt = Date.now();
   }
 
-  if (currentState.embedUrl) {
-    loadIframe(currentState.embedUrl);
-    pendingPlaybackApply = currentState.playback;
+  if (nextEmbedUrl) {
+    if (currentLoadedEmbedUrl !== nextEmbedUrl) {
+      loadIframe(nextEmbedUrl);
 
-    setTimeout(() => {
-      if (pendingPlaybackApply) {
-        const pb = pendingPlaybackApply;
-        pendingPlaybackApply = null;
-        applyPlaybackState(pb, { force: true, reason: 'sync-state' });
+      pendingPlaybackApply = playback;
+      setTimeout(() => {
+        if (pendingPlaybackApply) {
+          const pb = pendingPlaybackApply;
+          pendingPlaybackApply = null;
+          applyPlaybackState(pb, { force: true, reason: 'sync-state' });
+        }
+      }, 900);
+    } else {
+      if (!isHost) {
+        applyPlaybackState(playback, { force: false, reason: 'sync-state-same-video' });
+        startDriftCheck();
+      } else {
+        startHostTimers();
       }
-    }, 900);
+
+      startUserTimeTimer();
+    }
   } else {
+    pendingPlaybackApply = null;
+    currentLoadedEmbedUrl = null;
     showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
     hideOverlay();
   }
 });
 
 socket.on('video-changed', (state) => {
+  const nextEmbedUrl = state.embedUrl ?? null;
+
   const playback = normalizePlaybackFromServer(state.playback) || {
     paused: true,
     currentTime: 0,
@@ -1729,16 +1748,31 @@ socket.on('video-changed', (state) => {
     animeId: state.animeId ?? null,
     animeUrl: state.animeUrl ?? null,
     episodeNumber: state.episodeNumber ?? null,
-    embedUrl: state.embedUrl ?? null,
+    embedUrl: nextEmbedUrl,
     title: state.title ?? null,
     duration: 0,
     playback
   };
 
-  if (currentState.embedUrl) {
-    loadIframe(currentState.embedUrl);
-    pendingPlaybackApply = currentState.playback;
+  if (nextEmbedUrl) {
+    if (currentLoadedEmbedUrl !== nextEmbedUrl) {
+      loadIframe(nextEmbedUrl);
+      pendingPlaybackApply = playback;
+    } else {
+      pendingPlaybackApply = null;
+
+      if (!isHost) {
+        applyPlaybackState(playback, { force: true, reason: 'video-changed-same-video' });
+        startDriftCheck();
+      } else {
+        startHostTimers();
+      }
+
+      startUserTimeTimer();
+    }
   } else {
+    pendingPlaybackApply = null;
+    currentLoadedEmbedUrl = null;
     showPlaceholderUi('Ничего не выбрано', 'Хост пока не запустил тайтл');
     hideOverlay();
   }
