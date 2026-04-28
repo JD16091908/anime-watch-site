@@ -1,29 +1,32 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+  <script>
+    if (window.location.pathname === '/room.html') {
+      window.location.replace('/');
+    }
+  </script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>Комната просмотра — Anivmeste</title>
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <link rel="canonical" href="https://anivmeste.ru/" />
+
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="stylesheet" href="/room.css" />
   <link rel="stylesheet" href="/room-polish.css" />
   <link rel="stylesheet" href="/room-mobile-fix.css" />
   <link rel="stylesheet" href="/overlay-patch.css" />
+
   <style>
     .hidden {
       display: none !important;
     }
   </style>
-  <script>
-    window.AnivmesteConfig = {
-      support: {
-        description: 'Поддержите развитие AniVmeste — это помогает нам делать сервис лучше!',
-        thanksText: 'Спасибо, что вы с нами! ❤️',
-        boostyUrl: 'https://boosty.to/anivmeste',
-        donationAlertsUrl: 'https://www.donationalerts.com/r/anivmeste'
-      }
-    };
-  </script>
+
+  <script src="/config.js"></script>
 </head>
 <body>
 
@@ -39,13 +42,19 @@
 
     <div class="top-center">
       <span id="roomTitle">Комната просмотра</span>
-      <button id="copyLinkBtn" class="small-btn" type="button" title="Скопировать ссылку-приглашение">🔗 Пригласить</button>
+      <button id="copyLinkBtn" class="small-btn" type="button" title="Скопировать ссылку-приглашение">
+        🔗 Пригласить
+      </button>
     </div>
 
     <div class="top-actions">
       <span id="hostBadge" class="host-badge">👀 Зритель</span>
-      <button id="cinemaModeBtn" class="small-btn" type="button" title="Режим кинотеатра">🎬 Кино</button>
-      <button id="supportRoomBtn" class="small-btn room-support-btn" type="button" title="Поддержать проект">❤️ Поддержать</button>
+      <button id="cinemaModeBtn" class="small-btn" type="button" title="Режим кинотеатра">
+        🎬 Кино
+      </button>
+      <button id="supportRoomBtn" class="small-btn room-support-btn" type="button" title="Поддержать проект">
+        ❤️ Поддержать
+      </button>
     </div>
   </header>
 
@@ -56,8 +65,11 @@
       <div class="center-search-panel anime-search-section">
         <div class="center-search-head">
           <h2>🔍 Поиск аниме</h2>
-          <span id="hostSearchHint" class="muted-text center-search-hint">Вы можете искать тайтлы и запускать плеер для всей комнаты</span>
+          <span id="hostSearchHint" class="muted-text center-search-hint">
+            Вы можете искать тайтлы и запускать плеер для всей комнаты
+          </span>
         </div>
+
         <div class="center-search-box">
           <input
             id="searchInput"
@@ -70,6 +82,7 @@
           <span class="center-search-icon">🔍</span>
           <div class="search-dropdown" id="animeList"></div>
         </div>
+
         <div class="center-search-status" id="searchStatus"></div>
       </div>
 
@@ -123,7 +136,9 @@
             placeholder="Сообщение..."
             autocomplete="off"
           />
-          <button id="sendBtn" class="small-btn btn" type="button">Отправить</button>
+          <button id="sendBtn" class="small-btn btn" type="button">
+            Отправить
+          </button>
         </div>
       </div>
 
@@ -139,7 +154,9 @@
               placeholder="Ваш ник..."
               autocomplete="off"
             />
-            <button id="saveNicknameBtn" class="small-btn nickname-save-btn" type="button">Сохранить</button>
+            <button id="saveNicknameBtn" class="small-btn nickname-save-btn" type="button">
+              Сохранить
+            </button>
           </div>
         </div>
       </div>
@@ -165,27 +182,34 @@
   aria-hidden="true"
   role="dialog"
   style="
-    position: fixed; inset: 0; z-index: 9999;
-    display: flex; align-items: center; justify-content: center;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     padding: 16px;
   "
 >
   <div
     id="roomSupportModalBackdrop"
     style="
-      position: absolute; inset: 0;
+      position: absolute;
+      inset: 0;
       background: rgba(0,0,0,0.72);
       backdrop-filter: blur(4px);
     "
   ></div>
 
   <div style="
-    position: relative; z-index: 1;
+    position: relative;
+    z-index: 1;
     background: linear-gradient(180deg, #1e2842 0%, #18213a 100%);
     border: 1px solid rgba(255,255,255,0.10);
     border-radius: 20px;
     padding: 32px 28px 28px;
-    max-width: 420px; width: 100%;
+    max-width: 420px;
+    width: 100%;
     box-shadow: 0 24px 56px rgba(0,0,0,0.48);
     text-align: center;
   ">
@@ -193,17 +217,25 @@
       id="closeRoomSupportModalBtn"
       type="button"
       style="
-        position: absolute; top: 14px; right: 16px;
-        background: none; border: none;
-        color: #aebad6; font-size: 22px; cursor: pointer;
-        line-height: 1; padding: 4px;
+        position: absolute;
+        top: 14px;
+        right: 16px;
+        background: none;
+        border: none;
+        color: #aebad6;
+        font-size: 22px;
+        cursor: pointer;
+        line-height: 1;
+        padding: 4px;
         transition: color .15s;
       "
       title="Закрыть"
     >✕</button>
 
     <div style="font-size: 40px; margin-bottom: 12px;">❤️</div>
-    <h2 style="margin: 0 0 10px; font-size: 22px; font-weight: 800; color: #fff;">Поддержать проект</h2>
+    <h2 style="margin: 0 0 10px; font-size: 22px; font-weight: 800; color: #fff;">
+      Поддержать проект
+    </h2>
     <p id="roomSupportDescription" style="margin: 0 0 20px; color: #aebad6; font-size: 15px; line-height: 1.6;"></p>
     <p id="roomSupportThanks" style="margin: 0 0 22px; color: #9db4ff; font-size: 14px; font-weight: 600;"></p>
 
@@ -212,34 +244,16 @@
         id="roomSupportBoostyLink"
         href="#"
         target="_blank"
-        rel="noopener noreferrer"
-        style="
-          display: block; padding: 14px 20px;
-          border-radius: 12px;
-          background: linear-gradient(90deg, #f59e0b, #ef8c02);
-          color: #fff; font-size: 16px; font-weight: 800;
-          text-decoration: none;
-          transition: filter .18s, transform .18s;
-        "
-        onmouseover="this.style.filter='brightness(1.08)';this.style.transform='translateY(-1px)'"
-        onmouseout="this.style.filter='';this.style.transform=''"
+        rel="noopener noreferrer nofollow"
+        class="room-support-link room-support-link-boosty"
       >☕ Boosty</a>
 
       <a
         id="roomSupportDonationAlertsLink"
         href="#"
         target="_blank"
-        rel="noopener noreferrer"
-        style="
-          display: block; padding: 14px 20px;
-          border-radius: 12px;
-          background: linear-gradient(90deg, #ff4081, #e91e63);
-          color: #fff; font-size: 16px; font-weight: 800;
-          text-decoration: none;
-          transition: filter .18s, transform .18s;
-        "
-        onmouseover="this.style.filter='brightness(1.08)';this.style.transform='translateY(-1px)'"
-        onmouseout="this.style.filter='';this.style.transform=''"
+        rel="noopener noreferrer nofollow"
+        class="room-support-link room-support-link-da"
       >🎁 DonationAlerts</a>
     </div>
   </div>

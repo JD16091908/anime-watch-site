@@ -36,6 +36,50 @@ const SHIKI_SEARCH_CACHE_MAX_ENTRIES = 250;
 const shikimoriSearchCache = new Map();
 
 const BUILTIN_SEARCH_ALIASES = {
+  'наруто': [
+    'naruto',
+    'naruto shippuuden',
+    'naruto shippuden',
+    'наруто ураганные хроники',
+    'боруто',
+    'boruto',
+    'naruto movie',
+    'naruto ova'
+  ],
+  'naruto': [
+    'наруто',
+    'naruto shippuuden',
+    'naruto shippuden',
+    'наруто ураганные хроники',
+    'naruto movie',
+    'naruto ova'
+  ],
+  'наруто ураганные хроники': [
+    'naruto shippuuden',
+    'naruto shippuden',
+    'наруто',
+    'naruto'
+  ],
+  'naruto shippuden': [
+    'naruto shippuuden',
+    'наруто ураганные хроники',
+    'наруто'
+  ],
+  'naruto shippuuden': [
+    'naruto shippuden',
+    'наруто ураганные хроники',
+    'наруто'
+  ],
+  'боруто': [
+    'boruto',
+    'boruto naruto next generations',
+    'наруто'
+  ],
+  'boruto': [
+    'боруто',
+    'boruto naruto next generations',
+    'naruto'
+  ],
   'хантер': [
     'хантер х хантер',
     'хантер x хантер',
@@ -150,6 +194,15 @@ app.use(helmet({
 
 app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
+
+  if (
+    req.path === '/room.html' ||
+    req.path.startsWith('/room/') ||
+    req.path === '/room'
+  ) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  }
+
   next();
 });
 
@@ -225,6 +278,11 @@ app.get('/favicon.png', (req, res) => {
   });
 });
 
+app.get('/room.html', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  return res.redirect(301, '/');
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: false,
   index: false,
@@ -264,6 +322,8 @@ function transliterateRuToLat(value) {
 function transliterateLatToRuApprox(value) {
   return normalizeSearchText(value)
     .replace(/hunter/g, 'хантер')
+    .replace(/naruto/g, 'наруто')
+    .replace(/boruto/g, 'боруто')
     .replace(/x/g, ' х ')
     .replace(/shch/g, 'щ')
     .replace(/sch/g, 'щ')
@@ -434,7 +494,7 @@ function expandQueryVariants(query) {
     }
   }
 
-  return [...variants].filter(Boolean).slice(0, 12);
+  return [...variants].filter(Boolean).slice(0, 16);
 }
 
 function getSearchCacheKey(query) {
@@ -775,7 +835,7 @@ async function kodikGet(endpoint, params = {}) {
 
   const queryParams = {
     token: KODIK_TOKEN,
-    limit: '60',
+    limit: '80',
     ...params
   };
 
@@ -882,7 +942,9 @@ function getAllTitles(item) {
     item?.material_data?.title,
     item?.material_data?.ru_title,
     item?.material_data?.anime_title,
-    item?.material_data?.full_title
+    item?.material_data?.full_title,
+    item?.other_title,
+    item?.material_data?.other_title
   ]
     .map(value => String(value || '').trim())
     .filter(Boolean)
@@ -926,13 +988,23 @@ function getReleaseTimestamp(item) {
     item?.material_data?.anime_release_date ||
     item?.material_data?.release_date ||
     item?.material_data?.aired_at ||
-    item?.material_data?.next_episode_at ||
+    item?.material_data?.premiere_world ||
+    item?.material_data?.premiere_ru ||
+    item?.release_date ||
+    item?.aired_at ||
     null;
 
-  if (!rawDate) return 0;
+  if (rawDate) {
+    const ts = Date.parse(String(rawDate));
+    if (Number.isFinite(ts)) return ts;
+  }
 
-  const ts = Date.parse(String(rawDate));
-  return Number.isFinite(ts) ? ts : 0;
+  const year = Number(normalizeYear(item));
+  if (Number.isFinite(year) && year >= 1900 && year <= 2100) {
+    return Date.parse(`${year}-01-01T00:00:00.000Z`);
+  }
+
+  return 0;
 }
 
 function getStableAnimeId(item) {
@@ -995,9 +1067,9 @@ function calcSingleTitleScore(normalizedTitle, queryVariants, normalizedQuery) {
       for (const titleForm of titleForms) {
         if (!qForm || !titleForm) continue;
 
-        if (titleForm === qForm) score = Math.max(score, 25000);
-        else if (titleForm.startsWith(qForm)) score = Math.max(score, 16000);
-        else if (titleForm.includes(qForm)) score = Math.max(score, 8000);
+        if (titleForm === qForm) score = Math.max(score, 40000);
+        else if (titleForm.startsWith(qForm)) score = Math.max(score, 26000);
+        else if (titleForm.includes(qForm)) score = Math.max(score, 15000);
 
         const qTokens = tokenizeSearchText(qForm);
         const titleTokens = tokenizeSearchText(titleForm);
@@ -1008,18 +1080,18 @@ function calcSingleTitleScore(normalizedTitle, queryVariants, normalizedQuery) {
           if (!qToken) continue;
 
           if (titleTokens.includes(qToken)) {
-            tokenScore += qToken.length <= 3 ? 2200 : 3400;
+            tokenScore += qToken.length <= 3 ? 2200 : 4200;
           }
 
           for (const titleToken of titleTokens) {
             if (!titleToken) continue;
 
             if (titleToken === qToken) {
-              tokenScore += 3600;
+              tokenScore += 4600;
             } else if (titleToken.startsWith(qToken)) {
-              tokenScore += qToken.length <= 2 ? 1300 : 2600;
+              tokenScore += qToken.length <= 2 ? 1300 : 3200;
             } else if (titleToken.includes(qToken)) {
-              tokenScore += qToken.length <= 2 ? 250 : 700;
+              tokenScore += qToken.length <= 2 ? 250 : 1000;
             }
 
             const lenDiff = Math.abs(titleToken.length - qToken.length);
@@ -1032,7 +1104,7 @@ function calcSingleTitleScore(normalizedTitle, queryVariants, normalizedQuery) {
         }
 
         if (hasFullTokenMatch(titleForm, queryTokens)) {
-          tokenScore += 10000;
+          tokenScore += 18000;
         }
 
         if (qForm.length >= 4 && titleForm.length >= 4) {
@@ -1088,16 +1160,16 @@ function selectPrimaryKodikQueries(rawQuery, expandedQueries, normalizedQuery) {
     .sort((a, b) => b.score - a.score)
     .map(item => item.q);
 
-  let primary = scored.slice(0, 5);
+  let primary = scored.slice(0, 7);
 
   const latinBest = scored.find(q => isLatinText(q));
   if (latinBest && !primary.includes(latinBest)) {
-    primary = [latinBest, ...primary].slice(0, 5);
+    primary = [latinBest, ...primary].slice(0, 7);
   }
 
   primary = primary.filter(q => q.length >= 2);
 
-  return dedupeArray(primary).slice(0, 5);
+  return dedupeArray(primary).slice(0, 7);
 }
 
 function titleScore(item, queryVariants, normalizedQuery) {
@@ -1113,12 +1185,13 @@ function titleScore(item, queryVariants, normalizedQuery) {
 
   const qYear = normalizedQuery.match(/\b(19|20)\d{2}\b/)?.[0];
   const y = String(normalizeYear(item) || '');
-  if (qYear && y === qYear) score += 1000;
+  if (qYear && y === qYear) score += 1800;
 
-  if (isSerial(item)) score += 700;
-  if (getShikimoriId(item)) score += 200;
-  if (normalizePoster(item)) score += 60;
-  if (normalizeDescription(item)) score += 30;
+  if (getReleaseTimestamp(item)) score += 220;
+  if (isSerial(item)) score += 650;
+  if (getShikimoriId(item)) score += 220;
+  if (normalizePoster(item)) score += 80;
+  if (normalizeDescription(item)) score += 40;
 
   return score;
 }
@@ -1179,7 +1252,7 @@ function dedupeSearchResults(items, queryVariants) {
       queryVariantKeys.some(queryKey => hasStrongTitleMatch(candidate, queryKey))
     );
 
-    if (!goodMatch && item.score < 1800) continue;
+    if (!goodMatch && item.score < 1600) continue;
 
     const existing = strictMap.get(groupKey);
     if (!existing) {
@@ -1190,12 +1263,14 @@ function dedupeSearchResults(items, queryVariants) {
     const currentRank =
       item.score +
       (item.serialPriority ? 800 : 0) +
+      (item.releaseTs ? 120 : 0) +
       (item.poster ? 50 : 0) +
       (item.description ? 20 : 0);
 
     const existingRank =
       existing.score +
       (existing.serialPriority ? 800 : 0) +
+      (existing.releaseTs ? 120 : 0) +
       (existing.poster ? 50 : 0) +
       (existing.description ? 20 : 0);
 
@@ -1538,7 +1613,7 @@ async function fetchAnimeBySelection(selected) {
   }
 
   if (selected?.title) {
-    const searchVariants = expandQueryVariants(selected.title).slice(0, 3);
+    const searchVariants = expandQueryVariants(selected.title).slice(0, 5);
     const requests = [];
 
     for (const variant of searchVariants) {
@@ -1673,7 +1748,7 @@ async function handleKodikSearch(req, res) {
         return queryTokens.some(token => haystack.includes(token));
       })
       .sort(compareSearchItemsStrictOrder)
-      .slice(0, 60);
+      .slice(0, 80);
 
     setCachedSearch(normalizedQuery, finalResults);
     return res.json(finalResults);
@@ -1752,8 +1827,14 @@ app.post('/api/yummy/anime/by-selection', handleKodikAnimeBySelection);
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/support', (req, res) => res.sendFile(path.join(__dirname, 'public', 'support.html')));
 app.get('/support.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'support.html')));
-app.get('/room/:roomId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
-app.get('/room/:roomId/*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'room.html')));
+app.get('/room/:roomId', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.sendFile(path.join(__dirname, 'public', 'room.html'));
+});
+app.get('/room/:roomId/*', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.sendFile(path.join(__dirname, 'public', 'room.html'));
+});
 
 app.use('/api', (req, res) => {
   res.status(404).json({
@@ -1849,7 +1930,8 @@ function getEffectivePlayback(pb) {
   return {
     paused,
     currentTime: ct,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    sourceUpdatedAt: updatedAt
   };
 }
 
@@ -1864,7 +1946,8 @@ function getCurrentRoomState(roomId) {
     animeId: room.videoState.animeId,
     animeUrl: room.videoState.animeUrl,
     episodeNumber: room.videoState.episodeNumber,
-    playback: getEffectivePlayback(room.videoState.playback)
+    playback: getEffectivePlayback(room.videoState.playback),
+    serverNow: Date.now()
   };
 }
 
@@ -1874,6 +1957,7 @@ function getUsersWithMeta(roomId) {
 
   return room.users.map(u => ({
     ...u,
+    serverNow: Date.now(),
     isHost: !!room.creatorSocketId && u.id === room.creatorSocketId
   }));
 }
@@ -1899,6 +1983,8 @@ function sanitizeRoomUsername(name) {
 function pauseRoomPlayback(room) {
   if (!room?.videoState?.playback) return;
 
+  const effective = getEffectivePlayback(room.videoState.playback);
+  room.videoState.playback.currentTime = effective.currentTime;
   room.videoState.playback.paused = true;
   room.videoState.playback.updatedAt = Date.now();
   touchRoom(room);
@@ -1935,6 +2021,7 @@ setInterval(cleanupRooms, ROOM_CLEANUP_INTERVAL_MS);
 io.on('connection', (socket) => {
   socket.data.lastSeekEmitAt = 0;
   socket.data.lastUserTimeEmitAt = 0;
+  socket.data.lastControlEmitAt = 0;
 
   socket.on('join-room', ({ roomId, username, userKey }) => {
     const safeRoomId = sanitizeRoomId(roomId);
@@ -1989,7 +2076,8 @@ io.on('connection', (socket) => {
       username: socket.data.username,
       currentTime: null,
       playbackPaused: true,
-      timeUpdatedAt: 0
+      timeUpdatedAt: 0,
+      joinedAt: Date.now()
     });
 
     touchRoom(room);
@@ -2036,6 +2124,8 @@ io.on('connection', (socket) => {
     const room = rooms[safeRoomId];
     if (!room || !isRoomHost(room, socket)) return;
 
+    const now = Date.now();
+
     room.videoState.embedUrl = embedUrl || null;
     room.videoState.title = title || 'Без названия';
     room.videoState.animeId = animeId ?? null;
@@ -2044,7 +2134,7 @@ io.on('connection', (socket) => {
     room.videoState.playback = {
       paused: true,
       currentTime: 0,
-      updatedAt: Date.now()
+      updatedAt: now
     };
 
     room.users = room.users.map(user => ({
@@ -2067,7 +2157,9 @@ io.on('connection', (socket) => {
     const room = rooms[safeRoomId];
     if (!room || !isRoomHost(room, socket)) return;
 
-    const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
+    const now = Date.now();
+
+    const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime) && currentTime >= 0
       ? currentTime
       : null;
 
@@ -2075,33 +2167,40 @@ io.on('connection', (socket) => {
       room.videoState.playback = {
         paused: true,
         currentTime: null,
-        updatedAt: Date.now()
+        updatedAt: now
       };
     }
 
     if (action === 'seek') {
-      const now = Date.now();
       if (now - socket.data.lastSeekEmitAt < 250) return;
       socket.data.lastSeekEmitAt = now;
     }
 
+    if (action === 'timeupdate') {
+      if (now - socket.data.lastControlEmitAt < 550) return;
+      socket.data.lastControlEmitAt = now;
+    }
+
+    const effective = getEffectivePlayback(room.videoState.playback);
+    const fallbackTime = effective.currentTime;
+
     if (action === 'play') {
       room.videoState.playback.paused = false;
-      room.videoState.playback.currentTime = safeTime !== null ? safeTime : room.videoState.playback.currentTime;
-      room.videoState.playback.updatedAt = Date.now();
+      room.videoState.playback.currentTime = safeTime !== null ? safeTime : fallbackTime;
+      room.videoState.playback.updatedAt = now;
     } else if (action === 'pause') {
       room.videoState.playback.paused = true;
-      room.videoState.playback.currentTime = safeTime !== null ? safeTime : room.videoState.playback.currentTime;
-      room.videoState.playback.updatedAt = Date.now();
+      room.videoState.playback.currentTime = safeTime !== null ? safeTime : fallbackTime;
+      room.videoState.playback.updatedAt = now;
     } else if (action === 'seek') {
       if (safeTime !== null) {
         room.videoState.playback.currentTime = safeTime;
-        room.videoState.playback.updatedAt = Date.now();
+        room.videoState.playback.updatedAt = now;
       }
     } else if (action === 'timeupdate') {
-      if (safeTime !== null && safeTime >= 0) {
+      if (safeTime !== null) {
         room.videoState.playback.currentTime = safeTime;
-        room.videoState.playback.updatedAt = Date.now();
+        room.videoState.playback.updatedAt = now;
       }
     }
 
@@ -2111,7 +2210,19 @@ io.on('connection', (socket) => {
       action,
       currentTime: room.videoState.playback.currentTime,
       paused: room.videoState.playback.paused,
-      updatedAt: room.videoState.playback.updatedAt
+      updatedAt: room.videoState.playback.updatedAt,
+      serverNow: Date.now()
+    });
+  });
+
+  socket.on('request-sync', ({ roomId }) => {
+    const safeRoomId = sanitizeRoomId(roomId);
+    const room = rooms[safeRoomId];
+    if (!room) return;
+
+    socket.emit('sync-state', {
+      ...getCurrentRoomState(safeRoomId),
+      isHost: isRoomHost(room, socket)
     });
   });
 
@@ -2189,7 +2300,8 @@ io.on('connection', (socket) => {
           action: 'pause',
           currentTime: room.videoState.playback.currentTime,
           paused: true,
-          updatedAt: room.videoState.playback.updatedAt
+          updatedAt: room.videoState.playback.updatedAt,
+          serverNow: Date.now()
         });
 
         io.to(roomId).emit('system-message', {

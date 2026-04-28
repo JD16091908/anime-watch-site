@@ -1,5 +1,6 @@
-/* Visual polish layer for room buttons and clickable controls.
-   Include this file after room.css in room.html. */
+/* ================================
+   ROOM UI POLISH (buttons & controls)
+   ================================ */
 
 :root {
   --btn-gradient: linear-gradient(90deg, #5f7cff 0%, #7d74ff 52%, #ff6d97 100%);
@@ -8,6 +9,8 @@
   --btn-shadow-hover: 0 14px 30px rgba(111, 109, 255, 0.38), 0 7px 18px rgba(255, 109, 151, 0.26);
   --btn-text: #ffffff;
 }
+
+/* ===== Общие кнопки ===== */
 
 .room-page .small-btn,
 .room-page .btn,
@@ -24,6 +27,8 @@
   overflow: hidden;
 }
 
+/* ===== Shine эффект ===== */
+
 .room-page .small-btn::before,
 .room-page .btn::before,
 .room-page .watch-order-toggle::before,
@@ -36,10 +41,17 @@
   left: -120%;
   width: 60%;
   height: 100%;
-  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.28) 50%, transparent 100%);
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 100%
+  );
   transition: left 0.45s ease;
   pointer-events: none;
 }
+
+/* ===== Hover ===== */
 
 .room-page .small-btn:hover,
 .room-page .btn:hover,
@@ -62,6 +74,8 @@
   left: 130%;
 }
 
+/* ===== Active ===== */
+
 .room-page .small-btn:active,
 .room-page .btn:active,
 .room-page .watch-order-toggle:active,
@@ -69,8 +83,12 @@
 .room-page .search-results-toggle:active,
 .room-page .nickname-save-btn:active {
   transform: translateY(0);
-  box-shadow: 0 6px 16px rgba(95, 124, 255, 0.30), 0 3px 10px rgba(255, 109, 151, 0.22);
+  box-shadow:
+    0 6px 16px rgba(95, 124, 255, 0.30),
+    0 3px 10px rgba(255, 109, 151, 0.22);
 }
+
+/* ===== Disabled ===== */
 
 .room-page .small-btn:disabled,
 .room-page .btn:disabled,
@@ -84,11 +102,15 @@
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
 }
 
+/* ===== Host badge ===== */
+
 .room-page .host-badge {
   background: var(--btn-gradient);
   color: #fff;
   box-shadow: var(--btn-shadow);
 }
+
+/* ===== Inputs focus ===== */
 
 .room-page .chat-input-box input:focus,
 .room-page .nickname-input:focus,
@@ -97,12 +119,41 @@
   box-shadow: 0 0 0 3px rgba(132, 131, 255, 0.22);
 }
 
+/* ===== Hover элементы списка ===== */
+
 .room-page .search-result-item:hover,
 .room-page .search-result-item.active,
 .room-page .overlay-dropdown-item:hover,
 .room-page .overlay-dropdown-item.active {
   background: rgba(116, 133, 255, 0.20);
 }
+
+/* ===== Support modal links ===== */
+
+.room-support-link {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 700;
+  color: #fff;
+  transition: 0.18s ease;
+}
+
+.room-support-link-boosty {
+  background: linear-gradient(90deg, #f97316 0%, #fb923c 100%);
+}
+
+.room-support-link-da {
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.room-support-link:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+/* ===== Mobile ===== */
 
 @media (max-width: 768px) {
   .room-page .small-btn,

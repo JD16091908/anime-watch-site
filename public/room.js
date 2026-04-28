@@ -5,18 +5,25 @@ const SUPPORT_CONFIG = CONFIG.support || {};
 const BOOSTY_URL = SUPPORT_CONFIG.boostyUrl || '#';
 const DONATIONALERTS_URL = SUPPORT_CONFIG.donationAlertsUrl || '#';
 
+if (window.location.pathname === '/room.html') {
+  window.location.replace('/');
+}
+
 const params = new URLSearchParams(window.location.search);
 const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] || '');
 
 const SEARCH_ENDPOINTS = ['/api/kodik/search', '/api/yummy/search'];
 const SELECT_ENDPOINTS = ['/api/kodik/anime/by-selection', '/api/yummy/anime/by-selection'];
 
-const SYNC_TOLERANCE_SEC = 2.5;
-const SYNC_DRIFT_INTERVAL = 2000;
-const SYNC_SEEK_COOLDOWN = 1500;
-const HOST_BROADCAST_INTERVAL = 800;
+const SYNC_TOLERANCE_SEC = 1.35;
+const SYNC_HARD_SEEK_SEC = 4.5;
+const SYNC_DRIFT_INTERVAL = 1500;
+const SYNC_SEEK_COOLDOWN = 1400;
+const HOST_BROADCAST_INTERVAL = 700;
 const USER_TIME_INTERVAL = 1000;
 const USER_TIME_STALE_MS = 15000;
+const RESYNC_AFTER_IFRAME_MS = 1200;
+const REQUEST_SYNC_INTERVAL = 7000;
 
 function updateRoomDocumentMeta(currentRoomId) {
   const title = currentRoomId === 'solo' ? 'Одиночный просмотр' : 'Комната просмотра';
@@ -135,6 +142,7 @@ let userInteractedWithPlayer = false;
 let hostTimeBroadcastTimer = null;
 let userTimeBroadcastTimer = null;
 let driftCheckTimer = null;
+let requestSyncTimer = null;
 let hasShownHostMessage = false;
 let lastKnownHostTime = null;
 let lastKnownHostTimeAt = 0;
@@ -343,7 +351,7 @@ async function fetchJsonFallback(endpoints, options = {}) {
     try {
       const response = await fetch(endpoint, options);
       const data = await readJsonSafely(response);
-      if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+      if (!response.ok) throw new Error(data?.code || data?.error || `HTTP ${response.status}`);
       return data;
     } catch (error) {
       lastError = error;
@@ -373,6 +381,14 @@ function getEffectivePlaybackTime(playback = currentState.playback) {
   const updatedAt = Number(safe.updatedAt || Date.now()) || Date.now();
   const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
   return base + elapsed;
+}
+
+function getPlayerActualTimeFallback() {
+  if (window.PlayerModule && typeof window.PlayerModule.getCurrentTime === 'function') {
+    const playerTime = Number(window.PlayerModule.getCurrentTime());
+    if (Number.isFinite(playerTime) && playerTime >= 0) return playerTime;
+  }
+  return getEffectivePlaybackTime(currentState.playback);
 }
 
 function getPlayerName(video) {
@@ -459,24 +475,47 @@ function getInterpolatedHostTime() {
   return lastKnownHostTime + elapsed;
 }
 
-function applyPlaybackState(playback, { force = false } = {}) {
-  if (!window.PlayerModule || !playback) return;
+function normalizePlaybackFromServer(playback) {
+  if (!playback) return null;
 
-  const now = Date.now();
-  let targetTime = typeof playback.currentTime === 'number' && !Number.isNaN(playback.currentTime)
+  const safeTime = typeof playback.currentTime === 'number' && !Number.isNaN(playback.currentTime)
     ? playback.currentTime
     : null;
 
-  if (targetTime !== null && !playback.paused && playback.updatedAt) {
-    const networkDelay = Math.max(0, (now - Number(playback.updatedAt)) / 1000);
-    targetTime = targetTime + networkDelay;
+  return {
+    paused: !!playback.paused,
+    currentTime: safeTime,
+    updatedAt: Number(playback.updatedAt || Date.now()) || Date.now()
+  };
+}
+
+function applyPlaybackState(playback, { force = false, reason = 'sync' } = {}) {
+  if (!window.PlayerModule || !playback) return;
+
+  const normalized = normalizePlaybackFromServer(playback);
+  if (!normalized) return;
+
+  const now = Date.now();
+  let targetTime = normalized.currentTime;
+
+  if (targetTime !== null && !normalized.paused && normalized.updatedAt) {
+    const networkDelay = Math.max(0, (now - normalized.updatedAt) / 1000);
+    targetTime += networkDelay;
   }
 
   if (targetTime !== null) {
+    const actualTime = getPlayerActualTimeFallback();
+    const actualDrift = typeof actualTime === 'number' ? Math.abs(actualTime - targetTime) : Infinity;
     const timeSinceLastApply = now - lastAppliedAt;
-    const drift = Math.abs((lastAppliedTargetTime ?? -999) - targetTime);
+    const targetDrift = Math.abs((lastAppliedTargetTime ?? -999) - targetTime);
 
-    if (force || timeSinceLastApply > SYNC_SEEK_COOLDOWN || drift > SYNC_TOLERANCE_SEC) {
+    const shouldSeek =
+      force ||
+      actualDrift >= SYNC_HARD_SEEK_SEC ||
+      (actualDrift >= SYNC_TOLERANCE_SEC && timeSinceLastApply > SYNC_SEEK_COOLDOWN) ||
+      (targetDrift > SYNC_TOLERANCE_SEC && timeSinceLastApply > SYNC_SEEK_COOLDOWN);
+
+    if (shouldSeek) {
       try {
         window.PlayerModule.seekTo(targetTime);
       } catch {}
@@ -485,7 +524,7 @@ function applyPlaybackState(playback, { force = false } = {}) {
     }
   }
 
-  if (playback.paused) {
+  if (normalized.paused) {
     try {
       window.PlayerModule.pause();
     } catch {}
@@ -493,6 +532,14 @@ function applyPlaybackState(playback, { force = false } = {}) {
     try {
       window.PlayerModule.play();
     } catch {}
+  }
+
+  if (reason !== 'local') {
+    currentState.playback = {
+      paused: normalized.paused,
+      currentTime: targetTime !== null ? targetTime : normalized.currentTime,
+      updatedAt: Date.now()
+    };
   }
 }
 
@@ -504,11 +551,22 @@ function checkDrift() {
   const hostTime = getInterpolatedHostTime();
   if (hostTime === null) return;
 
-  const myTime = getEffectivePlaybackTime(currentState.playback);
+  const myTime = getPlayerActualTimeFallback();
   if (typeof myTime !== 'number' || Number.isNaN(myTime)) return;
 
   const drift = Math.abs(myTime - hostTime);
   const now = Date.now();
+
+  if (drift > SYNC_HARD_SEEK_SEC && now - lastForcedSyncAt > SYNC_SEEK_COOLDOWN) {
+    try {
+      window.PlayerModule.seekTo(hostTime);
+      window.PlayerModule.play();
+    } catch {}
+    lastAppliedTargetTime = hostTime;
+    lastAppliedAt = now;
+    lastForcedSyncAt = now;
+    return;
+  }
 
   if (drift > SYNC_TOLERANCE_SEC && now - lastForcedSyncAt > SYNC_SEEK_COOLDOWN) {
     try {
@@ -533,6 +591,23 @@ function stopDriftCheck() {
   }
 }
 
+function startRequestSyncTimer() {
+  stopRequestSyncTimer();
+  if (roomId === 'solo') return;
+
+  requestSyncTimer = setInterval(() => {
+    if (!socket.connected) return;
+    socket.emit('request-sync', { roomId });
+  }, REQUEST_SYNC_INTERVAL);
+}
+
+function stopRequestSyncTimer() {
+  if (requestSyncTimer) {
+    clearInterval(requestSyncTimer);
+    requestSyncTimer = null;
+  }
+}
+
 function startHostTimers() {
   stopHostTimers();
   if (!isHost || roomId === 'solo') return;
@@ -540,7 +615,7 @@ function startHostTimers() {
   hostTimeBroadcastTimer = setInterval(() => {
     if (!isHost || roomId === 'solo' || !currentState.embedUrl) return;
 
-    const ct = getEffectivePlaybackTime(currentState.playback);
+    const ct = getPlayerActualTimeFallback();
     if (typeof ct === 'number' && ct >= 0) {
       currentState.playback.currentTime = ct;
       currentState.playback.updatedAt = Date.now();
@@ -564,7 +639,7 @@ function stopHostTimers() {
 function emitCurrentUserTime() {
   if (roomId === 'solo' || !currentState.embedUrl) return;
 
-  const ct = getEffectivePlaybackTime(currentState.playback);
+  const ct = getPlayerActualTimeFallback();
   if (typeof ct === 'number' && ct >= 0) {
     socket.emit('update-user-time', {
       roomId,
@@ -616,12 +691,13 @@ window.addEventListener('player:play', () => {
 
   if (!isHost || roomId === 'solo') return;
   socket.emit('player-control', {
-    roomId, action: 'play', currentTime: currentState.playback.currentTime
+    roomId, action: 'play', currentTime: getPlayerActualTimeFallback()
   });
 });
 
 window.addEventListener('player:pause', () => {
   currentState.playback.paused = true;
+  currentState.playback.currentTime = getPlayerActualTimeFallback();
   currentState.playback.updatedAt = Date.now();
 
   if (!isHost || roomId === 'solo') return;
@@ -818,7 +894,7 @@ function loadIframe(embedUrl) {
   if (pendingPlaybackApply) {
     const pb = pendingPlaybackApply;
     pendingPlaybackApply = null;
-    setTimeout(() => applyPlaybackState(pb, { force: true }), 800);
+    setTimeout(() => applyPlaybackState(pb, { force: true, reason: 'pending' }), 800);
   }
 
   setTimeout(() => {
@@ -835,6 +911,10 @@ function loadIframe(embedUrl) {
         showViewerHint('Если серия не стартовала, нажмите по плееру один раз.');
       }
     }, 800);
+
+    setTimeout(() => {
+      socket.emit('request-sync', { roomId });
+    }, RESYNC_AFTER_IFRAME_MS);
   }
 }
 
@@ -982,10 +1062,6 @@ function extractTbIndex(title) {
   if (!m) return null;
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
-}
-
-function scoreBucket(score) {
-  return Math.floor((Number(score) || 0) / 8000);
 }
 
 function sortSearchResults(items) {
@@ -1395,6 +1471,7 @@ function startUsersRenderTicker() {
 socket.on('connect', () => {
   if (roomId !== 'solo') {
     socket.emit('join-room', { roomId, username, userKey });
+    startRequestSyncTimer();
   } else {
     isHost = true;
     updateControlState();
@@ -1412,10 +1489,12 @@ socket.on('disconnect', () => {
   stopHostTimers();
   stopUserTimeTimer();
   stopDriftCheck();
+  stopRequestSyncTimer();
 });
 
 socket.on('you-are-host', () => {
   isHost = true;
+  if (window.PlayerModule) window.PlayerModule.setHostState(true);
   updateControlState();
   stopDriftCheck();
 
@@ -1428,7 +1507,10 @@ socket.on('you-are-host', () => {
 
 socket.on('sync-state', (state) => {
   isHost = !!state.isHost;
+  if (window.PlayerModule) window.PlayerModule.setHostState(isHost);
   updateControlState();
+
+  const playback = normalizePlaybackFromServer(state.playback) || { paused: true, currentTime: 0, updatedAt: 0 };
 
   currentState = {
     animeId: state.animeId ?? null,
@@ -1437,13 +1519,24 @@ socket.on('sync-state', (state) => {
     embedUrl: state.embedUrl ?? null,
     title: state.title ?? null,
     duration: currentState.duration || 0,
-    playback: state.playback || { paused: true, currentTime: 0, updatedAt: 0 }
+    playback
   };
+
+  if (typeof playback.currentTime === 'number') {
+    lastKnownHostTime = playback.currentTime;
+    lastKnownHostTimeAt = Date.now();
+  }
 
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
     pendingPlaybackApply = currentState.playback;
-    setTimeout(() => applyPlaybackState(pendingPlaybackApply, { force: true }), 900);
+    setTimeout(() => {
+      if (pendingPlaybackApply) {
+        const pb = pendingPlaybackApply;
+        pendingPlaybackApply = null;
+        applyPlaybackState(pb, { force: true, reason: 'sync-state' });
+      }
+    }, 900);
   } else {
     showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
     hideOverlay();
@@ -1451,6 +1544,8 @@ socket.on('sync-state', (state) => {
 });
 
 socket.on('video-changed', (state) => {
+  const playback = normalizePlaybackFromServer(state.playback) || { paused: true, currentTime: 0, updatedAt: Date.now() };
+
   currentState = {
     animeId: state.animeId ?? null,
     animeUrl: state.animeUrl ?? null,
@@ -1458,7 +1553,7 @@ socket.on('video-changed', (state) => {
     embedUrl: state.embedUrl ?? null,
     title: state.title ?? null,
     duration: 0,
-    playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
+    playback
   };
 
   if (currentState.embedUrl) {
@@ -1488,24 +1583,22 @@ socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
     updatedAt: Number(updatedAt || Date.now()) || Date.now()
   };
 
-  if (action === 'timeupdate' || action === 'seek') {
+  if (action === 'timeupdate') {
+    checkDrift();
     emitCurrentUserTime();
+    return;
   }
 
-  const now = Date.now();
-
   if (action === 'play' || action === 'pause') {
-    applyPlaybackState(currentState.playback, { force: true });
-    lastAppliedAt = now;
+    applyPlaybackState(currentState.playback, { force: true, reason: action });
+    lastAppliedAt = Date.now();
     lastAppliedTargetTime = safeTime;
-    lastForcedSyncAt = now;
+    lastForcedSyncAt = Date.now();
   } else if (action === 'seek') {
-    if (now - lastAppliedAt > 300) {
-      applyPlaybackState(currentState.playback, { force: true });
-      lastAppliedAt = now;
-      lastAppliedTargetTime = safeTime;
-      lastForcedSyncAt = now;
-    }
+    applyPlaybackState(currentState.playback, { force: true, reason: 'seek' });
+    lastAppliedAt = Date.now();
+    lastAppliedTargetTime = safeTime;
+    lastForcedSyncAt = Date.now();
   }
 });
 
@@ -1628,6 +1721,7 @@ window.addEventListener('beforeunload', () => {
   stopHostTimers();
   stopUserTimeTimer();
   stopDriftCheck();
+  stopRequestSyncTimer();
   if (usersRenderTicker) {
     clearInterval(usersRenderTicker);
     usersRenderTicker = null;

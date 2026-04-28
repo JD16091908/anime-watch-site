@@ -4,12 +4,11 @@ window.PlayerModule = (() => {
   let onVideoChangedCallback = null;
   let onEndedCallback = null;
 
-  // Очередь команд до готовности плеера
   let commandQueue = [];
   let playerReady = false;
   let playerReadyTimer = null;
-
-  // ── Утилиты ──────────────────────────────────────────────────────────────
+  let lastKnownTime = 0;
+  let lastKnownDuration = 0;
 
   function normalizeUrl(url) {
     if (!url) return '';
@@ -33,8 +32,6 @@ window.PlayerModule = (() => {
     return 'unknown';
   }
 
-  // ── Overlay helpers ───────────────────────────────────────────────────────
-
   function extractOverlay(container) {
     if (!container) return null;
     const overlay = container.querySelector('#playerTopOverlay');
@@ -52,47 +49,68 @@ window.PlayerModule = (() => {
     }
   }
 
-  // ── postMessage к Kodik ───────────────────────────────────────────────────
+  function postMessageToIframe(payload) {
+    if (!currentIframe?.contentWindow) return false;
 
-  /**
-   * Отправляет команду в Kodik iframe.
-   * Если плеер ещё не готов — ставит в очередь.
-   * Поддерживает оба формата (объект и JSON-строка).
-   */
+    let sent = false;
+
+    try {
+      currentIframe.contentWindow.postMessage(payload, '*');
+      sent = true;
+    } catch {}
+
+    try {
+      currentIframe.contentWindow.postMessage(JSON.stringify(payload), '*');
+      sent = true;
+    } catch {}
+
+    return sent;
+  }
+
   function sendKodikCommand(method, params = {}, force = false) {
     if (!currentIframe?.contentWindow) return false;
 
     if (!playerReady && !force) {
-      // Кладём в очередь, дедупируем однотипные команды
       commandQueue = commandQueue.filter(c => c.method !== method);
       commandQueue.push({ method, params });
       return true;
     }
 
-    const payload = { source: 'external', method, params };
+    const payloads = [
+      { source: 'external', method, params },
+      { key: 'kodik_player_api', value: { method, params } },
+      { method, params }
+    ];
 
-    try {
-      currentIframe.contentWindow.postMessage(payload, '*');
-      return true;
-    } catch {
-      try {
-        currentIframe.contentWindow.postMessage(JSON.stringify(payload), '*');
-        return true;
-      } catch {
-        return false;
-      }
+    let sent = false;
+    for (const payload of payloads) {
+      sent = postMessageToIframe(payload) || sent;
     }
+
+    return sent;
   }
 
   function flushCommandQueue() {
     const queue = [...commandQueue];
     commandQueue = [];
+
     for (const { method, params } of queue) {
       sendKodikCommand(method, params, true);
     }
   }
 
-  // ── Iframe creation ───────────────────────────────────────────────────────
+  function markReady() {
+    if (playerReady) return;
+
+    playerReady = true;
+
+    if (playerReadyTimer) {
+      clearTimeout(playerReadyTimer);
+      playerReadyTimer = null;
+    }
+
+    flushCommandQueue();
+  }
 
   function createIframe({ src, title = 'Без названия' } = {}) {
     const normalizedSrc = normalizeUrl(src);
@@ -118,16 +136,16 @@ window.PlayerModule = (() => {
     currentIframe = iframe;
     playerReady = false;
     commandQueue = [];
+    lastKnownTime = 0;
+    lastKnownDuration = 0;
 
     if (playerReadyTimer) clearTimeout(playerReadyTimer);
 
-    // Fallback: считаем плеер готовым через 3 сек даже без события
-    playerReadyTimer = setTimeout(() => {
-      if (!playerReady) {
-        playerReady = true;
-        flushCommandQueue();
-      }
-    }, 3000);
+    iframe.addEventListener('load', () => {
+      setTimeout(markReady, 800);
+    });
+
+    playerReadyTimer = setTimeout(markReady, 2800);
 
     return iframe;
   }
@@ -138,10 +156,16 @@ window.PlayerModule = (() => {
 
     playerReady = false;
     commandQueue = [];
-    if (playerReadyTimer) { clearTimeout(playerReadyTimer); playerReadyTimer = null; }
+    lastKnownTime = 0;
+    lastKnownDuration = 0;
+
+    if (playerReadyTimer) {
+      clearTimeout(playerReadyTimer);
+      playerReadyTimer = null;
+    }
+
     currentIframe = null;
     container.innerHTML = '';
-
     restoreOverlay(container, overlay);
   }
 
@@ -152,11 +176,19 @@ window.PlayerModule = (() => {
 
     playerReady = false;
     commandQueue = [];
-    if (playerReadyTimer) { clearTimeout(playerReadyTimer); playerReadyTimer = null; }
+    lastKnownTime = 0;
+    lastKnownDuration = 0;
+
+    if (playerReadyTimer) {
+      clearTimeout(playerReadyTimer);
+      playerReadyTimer = null;
+    }
+
     currentIframe = null;
     container.innerHTML = '';
 
     const iframe = createIframe({ src, title });
+
     if (!iframe) {
       const wrapper = document.createElement('div');
       wrapper.className = 'placeholder';
@@ -186,7 +218,14 @@ window.PlayerModule = (() => {
 
     playerReady = false;
     commandQueue = [];
-    if (playerReadyTimer) { clearTimeout(playerReadyTimer); playerReadyTimer = null; }
+    lastKnownTime = 0;
+    lastKnownDuration = 0;
+
+    if (playerReadyTimer) {
+      clearTimeout(playerReadyTimer);
+      playerReadyTimer = null;
+    }
+
     currentIframe = null;
     container.innerHTML = '';
 
@@ -203,24 +242,41 @@ window.PlayerModule = (() => {
     restoreOverlay(container, overlay);
   }
 
-  // ── Playback API ──────────────────────────────────────────────────────────
-
   function play() {
-    return sendKodikCommand('play');
+    sendKodikCommand('play');
+    sendKodikCommand('video.play');
+    return true;
   }
 
   function pause() {
-    return sendKodikCommand('pause');
+    sendKodikCommand('pause');
+    sendKodikCommand('video.pause');
+    return true;
   }
 
   function seek(time) {
     const safeTime = Number(time);
     if (Number.isNaN(safeTime) || safeTime < 0) return false;
-    return sendKodikCommand('setTime', { time: safeTime });
+
+    lastKnownTime = safeTime;
+
+    sendKodikCommand('setTime', { time: safeTime });
+    sendKodikCommand('seek', { time: safeTime });
+    sendKodikCommand('video.seek', { time: safeTime });
+
+    return true;
   }
 
   function seekTo(time) {
     return seek(time);
+  }
+
+  function getCurrentTime() {
+    return lastKnownTime;
+  }
+
+  function getDuration() {
+    return lastKnownDuration;
   }
 
   function setHostState(state) {
@@ -239,62 +295,102 @@ window.PlayerModule = (() => {
     return sendKodikCommand('nextEpisode');
   }
 
-  // ── Message handler ───────────────────────────────────────────────────────
+  function extractNumberFromPayload(payload, keys = []) {
+    if (typeof payload === 'number') return payload;
+
+    if (typeof payload === 'string') {
+      const n = Number(payload);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    if (payload && typeof payload === 'object') {
+      for (const key of keys) {
+        const n = Number(payload[key]);
+        if (Number.isFinite(n)) return n;
+      }
+    }
+
+    return null;
+  }
+
+  function normalizeMessageData(rawData) {
+    if (!rawData) return null;
+
+    if (typeof rawData === 'string') {
+      try {
+        return JSON.parse(rawData);
+      } catch {
+        return null;
+      }
+    }
+
+    if (typeof rawData === 'object') return rawData;
+    return null;
+  }
 
   window.addEventListener('message', (event) => {
     if (!currentIframe || event.source !== currentIframe.contentWindow) return;
 
-    let data;
-    try {
-      data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-    } catch {
+    const data = normalizeMessageData(event.data);
+    if (!data) return;
+
+    const eventName = data.event || data.type || data.method || data.name;
+    const payload = data.payload || data.params || data.value || data.data || data;
+
+    if (
+      eventName === 'player:ready' ||
+      eventName === 'ready' ||
+      eventName === 'kodik:ready'
+    ) {
+      markReady();
       return;
     }
 
-    if (!data || data.type !== 'kodik:api:public') return;
-
-    const eventName = data.event;
-    const payload = data.payload || {};
-
-    // ── Плеер готов ──
-    if (eventName === 'player:ready' || eventName === 'ready') {
-      if (!playerReady) {
-        playerReady = true;
-        if (playerReadyTimer) { clearTimeout(playerReadyTimer); playerReadyTimer = null; }
-        flushCommandQueue();
-      }
-      return;
-    }
-
-    // ── Время / длительность ──
-    if (eventName === 'player:time-update') {
-      const seconds = typeof payload === 'number' ? payload : Number(payload);
-      if (!Number.isNaN(seconds) && seconds >= 0) {
+    if (
+      eventName === 'player:time-update' ||
+      eventName === 'timeupdate' ||
+      eventName === 'time-update' ||
+      eventName === 'currentTime'
+    ) {
+      const seconds = extractNumberFromPayload(payload, ['time', 'currentTime', 'seconds', 'position']);
+      if (seconds !== null && seconds >= 0) {
+        lastKnownTime = seconds;
         window.dispatchEvent(new CustomEvent('player:time-update', { detail: { time: seconds } }));
       }
       return;
     }
 
-    if (eventName === 'player:duration-update') {
-      const duration = typeof payload === 'number' ? payload : Number(payload);
-      if (!Number.isNaN(duration) && duration > 0) {
+    if (
+      eventName === 'player:duration-update' ||
+      eventName === 'durationchange' ||
+      eventName === 'duration'
+    ) {
+      const duration = extractNumberFromPayload(payload, ['duration', 'time', 'seconds']);
+      if (duration !== null && duration > 0) {
+        lastKnownDuration = duration;
         window.dispatchEvent(new CustomEvent('player:duration-update', { detail: { duration } }));
       }
       return;
     }
 
-    // ── Play / Pause ──
-    if (eventName === 'player:play') {
+    if (
+      eventName === 'player:play' ||
+      eventName === 'play' ||
+      eventName === 'video:play'
+    ) {
       window.dispatchEvent(new CustomEvent('player:play'));
       return;
     }
 
-    if (eventName === 'player:pause') {
+    if (
+      eventName === 'player:pause' ||
+      eventName === 'pause' ||
+      eventName === 'video:pause'
+    ) {
       window.dispatchEvent(new CustomEvent('player:pause'));
       return;
     }
 
-    // ── Смена серии внутри плеера ──
     if (eventName === 'change:episode') {
       if (isHost && onVideoChangedCallback) {
         onVideoChangedCallback({
@@ -304,13 +400,14 @@ window.PlayerModule = (() => {
           newUrl: payload.link
         });
       }
+
       if (!isHost) {
         setTimeout(() => sendKodikCommand('setEpisode', payload, true), 10);
       }
+
       return;
     }
 
-    // ── Смена озвучки внутри плеера ──
     if (eventName === 'change:translation') {
       if (isHost && onVideoChangedCallback) {
         onVideoChangedCallback({
@@ -320,26 +417,27 @@ window.PlayerModule = (() => {
           newUrl: payload.link
         });
       }
+
       if (!isHost) {
         setTimeout(() => sendKodikCommand('setTranslation', payload, true), 10);
       }
+
       return;
     }
 
-    // ── Конец серии ──
-    if (eventName === 'ended') {
+    if (
+      eventName === 'ended' ||
+      eventName === 'player:ended' ||
+      eventName === 'video:ended'
+    ) {
       if (onEndedCallback) onEndedCallback();
       return;
     }
 
-    // ── Реклама ──
     if (eventName === 'advertisement:end') {
       window.dispatchEvent(new CustomEvent('player:advertisement-ended'));
-      return;
     }
   });
-
-  // ── Public API ────────────────────────────────────────────────────────────
 
   return {
     normalizeUrl,
@@ -352,6 +450,8 @@ window.PlayerModule = (() => {
     pause,
     seek,
     seekTo,
+    getCurrentTime,
+    getDuration,
     setHostState,
     onVideoChanged,
     onEpisodeEnded,
