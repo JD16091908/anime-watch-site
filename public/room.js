@@ -879,15 +879,8 @@ function showBlockedAnimeMessage(message = 'Данное аниме запрещ
 }
 
 function showViewerHint(text = 'Если видео не стартовало автоматически, кликните по плееру один раз.') {
-  const playerWrapper = document.getElementById('playerWrapper');
-  if (!playerWrapper || !window.PlayerModule || isHost || roomId === 'solo') return;
-
-  window.PlayerModule.showPlaceholder(playerWrapper, {
-    title: 'Серия загружена',
-    description: text
-  });
-
-  playerWrapper.querySelector('.placeholder')?.classList.add('placeholder-click-through');
+  if (isHost || roomId === 'solo') return;
+  sys(text);
 }
 
 function hideViewerHintOverlay() {
