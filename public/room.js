@@ -111,6 +111,7 @@ function resolveInitialUsername() {
     safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '1');
     return usernameFromQuery;
   }
+
   if (hasManualUsername && savedUsername) return savedUsername;
 
   const randomUsername = generateRandomNickname();
@@ -123,10 +124,12 @@ let username = resolveInitialUsername();
 
 function getOrCreateUserKey() {
   let key = safeLocalStorageGet(USER_KEY_STORAGE);
+
   if (!key) {
     key = `uk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     safeLocalStorageSet(USER_KEY_STORAGE, key);
   }
+
   return key;
 }
 
@@ -158,6 +161,7 @@ let lastSearchResults = [];
 let lastSearchQueryNormalized = '';
 let activeSearchAbortController = null;
 let lastRenderedSearchSignature = '';
+let lastUserTimeEmitAtClient = 0;
 const clientSearchCache = new Map();
 
 let isOverlayPlayerOpen = false;
@@ -220,10 +224,12 @@ if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATION
 if (!window.AnivmesteDebounce) {
   window.AnivmesteDebounce = function debounce(fn, wait = 300) {
     let t = null;
+
     const wrapped = (...args) => {
       clearTimeout(t);
       t = setTimeout(() => fn(...args), wait);
     };
+
     wrapped.cancel = () => clearTimeout(t);
     return wrapped;
   };
@@ -303,8 +309,10 @@ function openRoomSupportModal() {
 
 function closeRoomSupportModal() {
   if (!roomSupportModal || roomSupportModal.classList.contains('hidden')) return;
+
   roomSupportModal.classList.remove('is-visible');
   roomSupportModal.classList.add('is-hiding');
+
   setTimeout(() => {
     roomSupportModal.classList.add('hidden');
     roomSupportModal.classList.remove('is-hiding');
@@ -317,7 +325,10 @@ const canControl = () => roomId === 'solo' || isHost;
 
 function getMoscowTimeString() {
   return new Intl.DateTimeFormat('ru-RU', {
-    timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', hour12: false
+    timeZone: 'Europe/Moscow',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
   }).format(new Date());
 }
 
@@ -330,14 +341,21 @@ function sys(text) {
 
 function escapeHtml(value) {
   return String(value ?? '')
-    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 async function readJsonSafely(response) {
   const contentType = response.headers.get('content-type') || '';
   const text = await response.text();
-  if (!contentType.includes('application/json')) throw new Error(`Сервер вернул не JSON. HTTP ${response.status}`);
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Сервер вернул не JSON. HTTP ${response.status}`);
+  }
+
   try {
     return JSON.parse(text);
   } catch {
@@ -347,6 +365,7 @@ async function readJsonSafely(response) {
 
 async function fetchJsonFallback(endpoints, options = {}) {
   let lastError = null;
+
   for (const endpoint of endpoints) {
     try {
       const response = await fetch(endpoint, options);
@@ -357,6 +376,7 @@ async function fetchJsonFallback(endpoints, options = {}) {
       lastError = error;
     }
   }
+
   throw lastError || new Error('Сервис временно недоступен');
 }
 
@@ -365,6 +385,7 @@ function formatWatchTime(seconds) {
   const hrs = Math.floor(total / 3600);
   const mins = Math.floor((total % 3600) / 60);
   const secs = total % 60;
+
   if (hrs > 0) return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
@@ -388,6 +409,7 @@ function getPlayerActualTimeFallback() {
     const playerTime = Number(window.PlayerModule.getCurrentTime());
     if (Number.isFinite(playerTime) && playerTime >= 0) return playerTime;
   }
+
   return getEffectivePlaybackTime(currentState.playback);
 }
 
@@ -410,14 +432,18 @@ function getIframeUrl(video) {
 
 function getUniquePlayers(videos) {
   const map = new Map();
+
   for (const video of videos || []) {
     const iframeUrl = getIframeUrl(video);
     if (!iframeUrl) continue;
+
     const name = getPlayerName(video);
     if (!map.has(name)) map.set(name, { name, episodeNumbers: new Set() });
+
     const epNum = getEpisodeNumber(video);
     if (epNum > 0) map.get(name).episodeNumbers.add(epNum);
   }
+
   return [...map.values()]
     .map(p => ({ name: p.name, count: p.episodeNumbers.size || 1 }))
     .sort((a, b) => b.count !== a.count ? b.count - a.count : a.name.localeCompare(b.name, 'ru'));
@@ -430,11 +456,13 @@ function getVideosBySelectedPlayer(videos) {
 
 function getUniqueSeasons(videos) {
   const map = new Map();
+
   for (const video of videos || []) {
     const season = getSeasonNumber(video);
     if (!map.has(season)) map.set(season, { season, count: 1 });
     else map.get(season).count += 1;
   }
+
   return [...map.values()].sort((a, b) => a.season - b.season);
 }
 
@@ -445,18 +473,22 @@ function getVideosBySelectedSeason(videos) {
 
 function getUniqueEpisodes(videos) {
   const map = new Map();
+
   for (const video of videos || []) {
     const ep = getEpisodeNumber(video);
     const url = getIframeUrl(video);
+
     if (!ep || !url) continue;
     if (!map.has(ep)) map.set(ep, { ...video, episodeNumber: ep });
   }
+
   return [...map.values()].sort((a, b) => a.episodeNumber - b.episodeNumber);
 }
 
 function findDefaultContext(videos) {
   const players = getUniquePlayers(videos);
   if (!players.length) return null;
+
   const player = players[0].name;
   const byPlayer = (videos || []).filter(v => getPlayerName(v) === player && !!getIframeUrl(v));
   const seasons = getUniqueSeasons(byPlayer);
@@ -464,6 +496,7 @@ function findDefaultContext(videos) {
   const bySeason = byPlayer.filter(v => getSeasonNumber(v) === season);
   const episodes = getUniqueEpisodes(bySeason);
   const episode = episodes[0] || null;
+
   if (!episode) return null;
   return { player, season, episode };
 }
@@ -471,6 +504,7 @@ function findDefaultContext(videos) {
 function getInterpolatedHostTime() {
   if (lastKnownHostTime === null) return null;
   if (currentState.playback.paused) return lastKnownHostTime;
+
   const elapsed = (Date.now() - lastKnownHostTimeAt) / 1000;
   return lastKnownHostTime + elapsed;
 }
@@ -519,6 +553,7 @@ function applyPlaybackState(playback, { force = false, reason = 'sync' } = {}) {
       try {
         window.PlayerModule.seekTo(targetTime);
       } catch {}
+
       lastAppliedTargetTime = targetTime;
       lastAppliedAt = now;
     }
@@ -562,6 +597,7 @@ function checkDrift() {
       window.PlayerModule.seekTo(hostTime);
       window.PlayerModule.play();
     } catch {}
+
     lastAppliedTargetTime = hostTime;
     lastAppliedAt = now;
     lastForcedSyncAt = now;
@@ -572,6 +608,7 @@ function checkDrift() {
     try {
       window.PlayerModule.seekTo(hostTime);
     } catch {}
+
     lastAppliedTargetTime = hostTime;
     lastAppliedAt = now;
     lastForcedSyncAt = now;
@@ -608,6 +645,37 @@ function stopRequestSyncTimer() {
   }
 }
 
+function updateLocalPlaybackTimeFromPlayer() {
+  const ct = getPlayerActualTimeFallback();
+
+  if (typeof ct !== 'number' || Number.isNaN(ct) || ct < 0) {
+    return null;
+  }
+
+  currentState.playback.currentTime = ct;
+  currentState.playback.updatedAt = Date.now();
+
+  return ct;
+}
+
+function emitCurrentUserTime({ force = false } = {}) {
+  if (roomId === 'solo' || !currentState.embedUrl) return;
+
+  const now = Date.now();
+  if (!force && now - lastUserTimeEmitAtClient < 450) return;
+  lastUserTimeEmitAtClient = now;
+
+  const ct = updateLocalPlaybackTimeFromPlayer();
+
+  if (typeof ct === 'number' && ct >= 0) {
+    socket.emit('update-user-time', {
+      roomId,
+      currentTime: ct,
+      paused: !!currentState.playback.paused
+    });
+  }
+}
+
 function startHostTimers() {
   stopHostTimers();
   if (!isHost || roomId === 'solo') return;
@@ -615,16 +683,16 @@ function startHostTimers() {
   hostTimeBroadcastTimer = setInterval(() => {
     if (!isHost || roomId === 'solo' || !currentState.embedUrl) return;
 
-    const ct = getPlayerActualTimeFallback();
-    if (typeof ct === 'number' && ct >= 0) {
-      currentState.playback.currentTime = ct;
-      currentState.playback.updatedAt = Date.now();
+    const ct = updateLocalPlaybackTimeFromPlayer();
 
+    if (typeof ct === 'number' && ct >= 0) {
       socket.emit('player-control', {
         roomId,
         action: 'timeupdate',
         currentTime: ct
       });
+
+      emitCurrentUserTime({ force: true });
     }
   }, HOST_BROADCAST_INTERVAL);
 }
@@ -636,24 +704,11 @@ function stopHostTimers() {
   }
 }
 
-function emitCurrentUserTime() {
-  if (roomId === 'solo' || !currentState.embedUrl) return;
-
-  const ct = getPlayerActualTimeFallback();
-  if (typeof ct === 'number' && ct >= 0) {
-    socket.emit('update-user-time', {
-      roomId,
-      currentTime: ct,
-      paused: !!currentState.playback.paused
-    });
-  }
-}
-
 function startUserTimeTimer() {
   stopUserTimeTimer();
   if (roomId === 'solo') return;
 
-  emitCurrentUserTime();
+  emitCurrentUserTime({ force: true });
 
   userTimeBroadcastTimer = setInterval(() => {
     emitCurrentUserTime();
@@ -678,6 +733,8 @@ window.addEventListener('player:time-update', (e) => {
     lastKnownHostTime = seconds;
     lastKnownHostTimeAt = Date.now();
   }
+
+  emitCurrentUserTime();
 });
 
 window.addEventListener('player:duration-update', (e) => {
@@ -686,24 +743,53 @@ window.addEventListener('player:duration-update', (e) => {
 });
 
 window.addEventListener('player:play', () => {
+  const ct = updateLocalPlaybackTimeFromPlayer();
+
   currentState.playback.paused = false;
+  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
   currentState.playback.updatedAt = Date.now();
 
+  emitCurrentUserTime({ force: true });
+
   if (!isHost || roomId === 'solo') return;
+
   socket.emit('player-control', {
-    roomId, action: 'play', currentTime: getPlayerActualTimeFallback()
+    roomId,
+    action: 'play',
+    currentTime: currentState.playback.currentTime
   });
 });
 
 window.addEventListener('player:pause', () => {
+  const ct = updateLocalPlaybackTimeFromPlayer();
+
   currentState.playback.paused = true;
-  currentState.playback.currentTime = getPlayerActualTimeFallback();
+  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
   currentState.playback.updatedAt = Date.now();
 
+  emitCurrentUserTime({ force: true });
+
   if (!isHost || roomId === 'solo') return;
+
   socket.emit('player-control', {
-    roomId, action: 'pause', currentTime: currentState.playback.currentTime
+    roomId,
+    action: 'pause',
+    currentTime: currentState.playback.currentTime
   });
+});
+
+window.addEventListener('player:local-play', () => {
+  currentState.playback.paused = false;
+  currentState.playback.updatedAt = Date.now();
+  emitCurrentUserTime({ force: true });
+});
+
+window.addEventListener('player:local-pause', () => {
+  const ct = updateLocalPlaybackTimeFromPlayer();
+  currentState.playback.paused = true;
+  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
+  currentState.playback.updatedAt = Date.now();
+  emitCurrentUserTime({ force: true });
 });
 
 function updateControlState() {
@@ -729,6 +815,7 @@ function updateControlState() {
   animeList?.querySelectorAll('button').forEach(btn => {
     btn.disabled = disabled;
   });
+
   if (overlayPlayerBtn) overlayPlayerBtn.disabled = disabled;
   if (overlayEpisodeBtn) overlayEpisodeBtn.disabled = disabled;
 }
@@ -776,10 +863,17 @@ function showPlaceholderUi(title = 'Ничего не выбрано', descripti
 
 function showBlockedAnimeMessage(message = 'Данное аниме запрещено на территории вашей страны') {
   selectedAnime = null;
+
   currentState = {
-    animeId: null, animeUrl: null, episodeNumber: null, embedUrl: null, title: null,
-    duration: 0, playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
+    animeId: null,
+    animeUrl: null,
+    episodeNumber: null,
+    embedUrl: null,
+    title: null,
+    duration: 0,
+    playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
   };
+
   updateSelectedAnimeInfoContent(null);
   showPlaceholderUi('Просмотр недоступен', message);
 }
@@ -787,16 +881,23 @@ function showBlockedAnimeMessage(message = 'Данное аниме запрещ
 function showViewerHint(text = 'Если видео не стартовало автоматически, кликните по плееру один раз.') {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper || !window.PlayerModule || isHost || roomId === 'solo') return;
-  window.PlayerModule.showPlaceholder(playerWrapper, { title: 'Серия загружена', description: text });
+
+  window.PlayerModule.showPlaceholder(playerWrapper, {
+    title: 'Серия загружена',
+    description: text
+  });
+
   playerWrapper.querySelector('.placeholder')?.classList.add('placeholder-click-through');
 }
 
 function hideViewerHintOverlay() {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper) return;
+
   const placeholderEl = playerWrapper.querySelector('.placeholder');
   if (!placeholderEl) return;
   if (!placeholderEl.classList.contains('placeholder-click-through')) return;
+
   placeholderEl.style.display = 'none';
 }
 
@@ -814,12 +915,15 @@ function resetBridge() {
 
 function detachPlayerOverlayFromWrapper(playerWrapper) {
   if (!playerWrapper) return null;
+
   const overlayEl = document.getElementById('playerTopOverlay');
   if (!overlayEl) return null;
+
   if (overlayEl.parentNode === playerWrapper) {
     overlayEl.remove();
     return overlayEl;
   }
+
   return null;
 }
 
@@ -857,16 +961,21 @@ function loadIframe(embedUrl) {
   stopUserTimeTimer();
   stopDriftCheck();
   resetBridge();
+
   lastKnownHostTime = null;
   lastKnownHostTimeAt = 0;
   lastAppliedTargetTime = null;
   lastAppliedAt = 0;
   lastForcedSyncAt = 0;
   pendingPlaybackApply = null;
+  lastUserTimeEmitAtClient = 0;
 
   const preservedOverlay = detachPlayerOverlayFromWrapper(playerWrapper);
 
-  window.PlayerModule.mountIframe(playerWrapper, { src: embedUrl, title: currentState.title });
+  window.PlayerModule.mountIframe(playerWrapper, {
+    src: embedUrl,
+    title: currentState.title
+  });
 
   attachPlayerOverlayToWrapper(playerWrapper, preservedOverlay);
 
@@ -949,6 +1058,7 @@ function renderOverlayControls() {
   }
 
   const currentEpNumber = currentState.episodeNumber || episodes[0]?.episodeNumber || 1;
+
   if (overlayEpisodeBtnText) {
     overlayEpisodeBtnText.textContent = `${currentEpNumber} серия`;
   }
@@ -980,6 +1090,7 @@ function renderOverlayControls() {
 
   overlayPlayerMenu?.querySelectorAll('[data-player]').forEach(btn => {
     btn.disabled = !canControl();
+
     btn.addEventListener('click', () => {
       selectedPlayer = btn.dataset.player;
       selectedSeason = null;
@@ -1000,12 +1111,15 @@ function renderOverlayControls() {
 
   overlayEpisodeMenu?.querySelectorAll('[data-episode]').forEach(btn => {
     btn.disabled = !canControl();
+
     btn.addEventListener('click', () => {
       const episodeNumber = Number(btn.dataset.episode);
       const refreshedByPlayer = getVideosBySelectedPlayer(selectedAnime?.videos || []);
       const refreshedBySeason = getVideosBySelectedSeason(refreshedByPlayer);
       const episode = getUniqueEpisodes(refreshedBySeason).find(v => v.episodeNumber === episodeNumber);
+
       if (!episode) return;
+
       isOverlayEpisodeOpen = false;
       overlayEpisodeDropdown?.classList.remove('open');
       renderOverlayControls();
@@ -1046,7 +1160,9 @@ function launchEpisode(episode, anime) {
 
   if (roomId !== 'solo') {
     socket.emit('change-video', {
-      roomId, embedUrl, title,
+      roomId,
+      embedUrl,
+      title,
       animeId: currentState.animeId,
       animeUrl: currentState.animeUrl,
       episodeNumber
@@ -1059,7 +1175,9 @@ function launchEpisode(episode, anime) {
 function extractTbIndex(title) {
   const t = String(title || '');
   const m = t.match(/\[(?:tb|тв|tv)[- ]?(\d+)\]/i) || t.match(/\b(?:tb|тв|tv)[- ]?(\d+)\b/i);
+
   if (!m) return null;
+
   const n = Number(m[1]);
   return Number.isFinite(n) ? n : null;
 }
@@ -1075,6 +1193,7 @@ function sortSearchResults(items) {
 
     const releaseA = Number(a?.releaseTs) || 0;
     const releaseB = Number(b?.releaseTs) || 0;
+
     if (releaseA || releaseB) {
       if (!releaseA) return 1;
       if (!releaseB) return -1;
@@ -1083,6 +1202,7 @@ function sortSearchResults(items) {
 
     const yearA = Number(a?.year) || 0;
     const yearB = Number(b?.year) || 0;
+
     if (yearA || yearB) {
       if (!yearA) return 1;
       if (!yearB) return -1;
@@ -1091,6 +1211,7 @@ function sortSearchResults(items) {
 
     const tbA = extractTbIndex(a?.title);
     const tbB = extractTbIndex(b?.title);
+
     if (tbA !== null || tbB !== null) {
       if (tbA === null) return 1;
       if (tbB === null) return -1;
@@ -1099,6 +1220,7 @@ function sortSearchResults(items) {
 
     const sA = Number(a?.score) || 0;
     const sB = Number(b?.score) || 0;
+
     if (sB !== sA) return sB - sA;
 
     return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
@@ -1109,16 +1231,23 @@ function buildSearchSignature(items, expanded) {
   const ids = (items || [])
     .map(item => `${item.animeId || ''}:${item.title || ''}:${item.year || ''}:${Number(item.score) || 0}`)
     .join('|');
+
   return `${expanded ? '1' : '0'}::${ids}`;
 }
 
 function pruneClientSearchCache() {
   const now = Date.now();
+
   for (const [key, entry] of clientSearchCache.entries()) {
-    if (!entry || now - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) clientSearchCache.delete(key);
+    if (!entry || now - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
+      clientSearchCache.delete(key);
+    }
   }
+
   if (clientSearchCache.size <= SEARCH_CLIENT_CACHE_MAX) return;
+
   const entries = [...clientSearchCache.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt);
+
   while (entries.length && clientSearchCache.size > SEARCH_CLIENT_CACHE_MAX) {
     const [oldestKey] = entries.shift();
     clientSearchCache.delete(oldestKey);
@@ -1127,12 +1256,15 @@ function pruneClientSearchCache() {
 
 function getClientCachedSearch(query) {
   pruneClientSearchCache();
+
   const entry = clientSearchCache.get(query);
   if (!entry) return null;
+
   if (Date.now() - entry.createdAt > SEARCH_CLIENT_CACHE_TTL_MS) {
     clientSearchCache.delete(query);
     return null;
   }
+
   return entry.data;
 }
 
@@ -1146,11 +1278,13 @@ function clearSearchResultsUi() {
     animeList.innerHTML = '';
     animeList.classList.remove('visible');
   }
+
   lastRenderedSearchSignature = '';
 }
 
 function renderAnimeResults(items) {
   if (!animeList) return;
+
   if (!items.length) {
     clearSearchResultsUi();
     return;
@@ -1159,6 +1293,7 @@ function renderAnimeResults(items) {
   const visibleItems = showAllSearchResults ? items : items.slice(0, 5);
   const needToggle = items.length > 5;
   const nextSignature = buildSearchSignature(items, showAllSearchResults);
+
   if (lastRenderedSearchSignature === nextSignature) return;
 
   animeList.innerHTML = `
@@ -1189,15 +1324,18 @@ function renderAnimeResults(items) {
 
   animeList.querySelectorAll('.search-result-item').forEach(btn => {
     btn.disabled = !canControl();
+
     btn.addEventListener('click', async () => {
       const selectedItemFromResults = items.find(item => item.animeId === btn.dataset.animeId);
       if (!selectedItemFromResults) return;
+
       clearSearchResultsUi();
       await selectAnime(selectedItemFromResults);
     });
   });
 
   const toggleBtn = document.getElementById('searchResultsToggleBtn');
+
   if (toggleBtn) {
     toggleBtn.disabled = !canControl();
 
@@ -1221,12 +1359,15 @@ function renderAnimeResults(items) {
 
 function toggleOverlayDropdown(dropdownElement, isOpenState) {
   if (!dropdownElement) return false;
+
   const nextState = !isOpenState;
   dropdownElement.classList.toggle('open', nextState);
+
   if (nextState) {
     if (dropdownElement !== overlayPlayerDropdown) overlayPlayerDropdown?.classList.remove('open');
     if (dropdownElement !== overlayEpisodeDropdown) overlayEpisodeDropdown?.classList.remove('open');
   }
+
   return nextState;
 }
 
@@ -1234,12 +1375,18 @@ async function fetchSearchResults(rawQuery, token) {
   const normalizedQuery = normalizeSearchQuery(rawQuery);
 
   const cached = getClientCachedSearch(normalizedQuery);
+
   if (cached) {
     if (token !== latestSearchToken) return;
+
     lastSearchQueryNormalized = normalizedQuery;
     lastSearchResults = cached;
     renderAnimeResults(lastSearchResults);
-    if (searchStatus) searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
+
+    if (searchStatus) {
+      searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
+    }
+
     return;
   }
 
@@ -1262,18 +1409,23 @@ async function fetchSearchResults(rawQuery, token) {
   lastSearchQueryNormalized = normalizedQuery;
   lastSearchResults = prepared;
   renderAnimeResults(lastSearchResults);
-  if (searchStatus) searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
+
+  if (searchStatus) {
+    searchStatus.textContent = lastSearchResults.length ? `Найдено: ${lastSearchResults.length}` : 'Ничего не найдено';
+  }
 }
 
 async function triggerSearchNow(rawQuery) {
   const value = String(rawQuery || '').trim();
   const normalized = normalizeSearchQuery(value);
+
   if (!value || normalized.length < SEARCH_MIN_LENGTH) return;
   if (!canControl()) return;
 
   latestSearchToken += 1;
   const token = latestSearchToken;
   showAllSearchResults = false;
+
   if (searchStatus) searchStatus.textContent = 'Поиск...';
 
   try {
@@ -1281,6 +1433,7 @@ async function triggerSearchNow(rawQuery) {
   } catch (error) {
     if (token !== latestSearchToken) return;
     if (error?.name === 'AbortError') return;
+
     if (searchStatus) searchStatus.textContent = 'Ошибка поиска. Попробуйте ещё раз.';
     clearSearchResultsUi();
   }
@@ -1303,10 +1456,12 @@ function reopenSearchDropdownFromInput() {
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) return;
 
   const cached = getClientCachedSearch(normalizedQuery);
+
   if (cached && cached.length) {
     lastSearchQueryNormalized = normalizedQuery;
     lastSearchResults = cached;
     renderAnimeResults(lastSearchResults);
+
     if (searchStatus) searchStatus.textContent = `Найдено: ${lastSearchResults.length}`;
     return;
   }
@@ -1320,14 +1475,17 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
 
   if (!rawQuery || normalizedQuery.length < SEARCH_MIN_LENGTH) {
     latestSearchToken += 1;
+
     if (activeSearchAbortController) {
       activeSearchAbortController.abort();
       activeSearchAbortController = null;
     }
+
     lastSearchResults = [];
     lastSearchQueryNormalized = '';
     showAllSearchResults = false;
     clearSearchResultsUi();
+
     if (searchStatus) searchStatus.textContent = 'Введите минимум 2 символа';
     return;
   }
@@ -1337,6 +1495,7 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
   latestSearchToken += 1;
   const token = latestSearchToken;
   showAllSearchResults = false;
+
   if (searchStatus) searchStatus.textContent = 'Поиск...';
 
   try {
@@ -1344,6 +1503,7 @@ const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
   } catch (error) {
     if (token !== latestSearchToken) return;
     if (error?.name === 'AbortError') return;
+
     if (searchStatus) searchStatus.textContent = 'Ошибка поиска. Попробуйте ещё раз.';
     clearSearchResultsUi();
   }
@@ -1374,6 +1534,7 @@ async function selectAnime(item) {
     };
 
     const context = findDefaultContext(selectedAnime.videos);
+
     if (!context) {
       updateSelectedAnimeInfoContent(selectedAnime);
       showPlaceholderUi('Нет доступных серий', 'Для выбранного тайтла не удалось найти рабочий плеер');
@@ -1392,6 +1553,7 @@ async function selectAnime(item) {
       showBlockedAnimeMessage();
       return;
     }
+
     updateSelectedAnimeInfoContent(null);
     showPlaceholderUi('Ошибка', error.message || 'Не удалось загрузить аниме');
     hideOverlay();
@@ -1400,6 +1562,7 @@ async function selectAnime(item) {
 
 function saveNickname() {
   const newUsername = sanitizeUsername(nicknameInput?.value);
+
   if (!newUsername) {
     alert('Введите ник');
     nicknameInput?.focus();
@@ -1408,8 +1571,10 @@ function saveNickname() {
 
   const oldUsername = username;
   username = newUsername;
+
   safeLocalStorageSet(USERNAME_STORAGE, username);
   safeLocalStorageSet(MANUAL_USERNAME_STORAGE, '1');
+
   if (nicknameInput) nicknameInput.value = username;
 
   if (roomId !== 'solo') {
@@ -1435,7 +1600,10 @@ function getDisplayedUserTime(user) {
 
 function renderUsers(users) {
   if (!usersList) return;
-  if (Array.isArray(users)) latestRoomUsers = users.map(user => ({ ...user }));
+
+  if (Array.isArray(users)) {
+    latestRoomUsers = users.map(user => ({ ...user }));
+  }
 
   if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
     usersList.innerHTML = `<div class="empty-state">Пока никого нет</div>`;
@@ -1456,7 +1624,10 @@ function renderUsers(users) {
             <span class="user-name">${escapeHtml(user.username)}</span>
             ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
           </div>
-          <div class="user-time ${isLive ? 'is-live' : 'is-paused'}" title="${isLive ? 'Сейчас смотрит' : 'На паузе'}">${escapeHtml(timeText)}</div>
+          <div
+            class="user-time ${isLive ? 'is-live' : 'is-paused'}"
+            title="${isLive ? 'Сейчас смотрит' : 'На паузе'}"
+          >${escapeHtml(timeText)}</div>
         </div>
       </div>
     `;
@@ -1474,6 +1645,7 @@ socket.on('connect', () => {
     startRequestSyncTimer();
   } else {
     isHost = true;
+    if (window.PlayerModule) window.PlayerModule.setHostState(true);
     updateControlState();
     updateSelectedAnimeInfoContent(selectedAnime);
     showPlaceholderUi(currentState.title || 'Ничего не выбрано', 'Выберите аниме');
@@ -1494,11 +1666,14 @@ socket.on('disconnect', () => {
 
 socket.on('you-are-host', () => {
   isHost = true;
+
   if (window.PlayerModule) window.PlayerModule.setHostState(true);
+
   updateControlState();
   stopDriftCheck();
 
   if (currentState.embedUrl) startHostTimers();
+
   if (!hasShownHostMessage) {
     sys('Вы хост комнаты');
     hasShownHostMessage = true;
@@ -1507,10 +1682,16 @@ socket.on('you-are-host', () => {
 
 socket.on('sync-state', (state) => {
   isHost = !!state.isHost;
+
   if (window.PlayerModule) window.PlayerModule.setHostState(isHost);
+
   updateControlState();
 
-  const playback = normalizePlaybackFromServer(state.playback) || { paused: true, currentTime: 0, updatedAt: 0 };
+  const playback = normalizePlaybackFromServer(state.playback) || {
+    paused: true,
+    currentTime: 0,
+    updatedAt: 0
+  };
 
   currentState = {
     animeId: state.animeId ?? null,
@@ -1530,6 +1711,7 @@ socket.on('sync-state', (state) => {
   if (currentState.embedUrl) {
     loadIframe(currentState.embedUrl);
     pendingPlaybackApply = currentState.playback;
+
     setTimeout(() => {
       if (pendingPlaybackApply) {
         const pb = pendingPlaybackApply;
@@ -1544,7 +1726,11 @@ socket.on('sync-state', (state) => {
 });
 
 socket.on('video-changed', (state) => {
-  const playback = normalizePlaybackFromServer(state.playback) || { paused: true, currentTime: 0, updatedAt: Date.now() };
+  const playback = normalizePlaybackFromServer(state.playback) || {
+    paused: true,
+    currentTime: 0,
+    updatedAt: Date.now()
+  };
 
   currentState = {
     animeId: state.animeId ?? null,
@@ -1608,8 +1794,16 @@ socket.on('system-message', ({ text }) => sys(text));
 
 socket.on('chat-message', ({ username: author, message, time }) => {
   if (!chatMessages || !window.ChatModule) return;
+
   const isSelfMessage = author === username;
-  window.ChatModule.appendMessage(chatMessages, { username: author, message, time, isSelf: isSelfMessage });
+
+  window.ChatModule.appendMessage(chatMessages, {
+    username: author,
+    message,
+    time,
+    isSelf: isSelfMessage
+  });
+
   if (!isSelfMessage) playChatSound();
 });
 
@@ -1636,6 +1830,7 @@ document.addEventListener('click', (event) => {
 overlayPlayerBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!canControl()) return;
+
   isOverlayPlayerOpen = toggleOverlayDropdown(overlayPlayerDropdown, isOverlayPlayerOpen);
   isOverlayEpisodeOpen = false;
 });
@@ -1643,6 +1838,7 @@ overlayPlayerBtn?.addEventListener('click', (event) => {
 overlayEpisodeBtn?.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!canControl()) return;
+
   isOverlayEpisodeOpen = toggleOverlayDropdown(overlayEpisodeDropdown, isOverlayEpisodeOpen);
   isOverlayPlayerOpen = false;
 });
@@ -1650,6 +1846,7 @@ overlayEpisodeBtn?.addEventListener('click', (event) => {
 if (copyLinkBtn) {
   copyLinkBtn.addEventListener('click', async () => {
     const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
+
     try {
       await navigator.clipboard.writeText(inviteUrl);
       sys('Ссылка скопирована');
@@ -1685,6 +1882,7 @@ if (sendBtn && chatInput) {
   sendBtn.addEventListener('click', () => {
     const message = chatInput.value.trim();
     if (!message) return;
+
     unlockAudioContext();
     playChatSound();
 
@@ -1692,9 +1890,13 @@ if (sendBtn && chatInput) {
       socket.emit('chat-message', { roomId, username, message });
     } else if (window.ChatModule && chatMessages) {
       window.ChatModule.appendMessage(chatMessages, {
-        username, message, time: getMoscowTimeString(), isSelf: true
+        username,
+        message,
+        time: getMoscowTimeString(),
+        isSelf: true
       });
     }
+
     chatInput.value = '';
     chatInput.focus();
   });
@@ -1708,6 +1910,7 @@ if (searchInput) {
   searchInput.addEventListener('input', () => debouncedSearchAnime(searchInput.value));
   searchInput.addEventListener('click', () => reopenSearchDropdownFromInput());
   searchInput.addEventListener('focus', () => reopenSearchDropdownFromInput());
+
   searchInput.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       clearSearchResultsUi();
@@ -1722,10 +1925,12 @@ window.addEventListener('beforeunload', () => {
   stopUserTimeTimer();
   stopDriftCheck();
   stopRequestSyncTimer();
+
   if (usersRenderTicker) {
     clearInterval(usersRenderTicker);
     usersRenderTicker = null;
   }
+
   if (activeSearchAbortController) {
     activeSearchAbortController.abort();
     activeSearchAbortController = null;
