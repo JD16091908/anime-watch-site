@@ -35,6 +35,8 @@ const SHIKI_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const SHIKI_SEARCH_CACHE_MAX_ENTRIES = 250;
 const shikimoriSearchCache = new Map();
 
+const KODIK_TYPES = 'anime-serial,anime,anime-film,anime-ova,anime-special';
+
 const BUILTIN_SEARCH_ALIASES = {
   'наруто': [
     'naruto',
@@ -44,7 +46,11 @@ const BUILTIN_SEARCH_ALIASES = {
     'боруто',
     'boruto',
     'naruto movie',
-    'naruto ova'
+    'naruto ova',
+    'naruto special',
+    'наруто фильм',
+    'наруто ова',
+    'наруто спешл'
   ],
   'naruto': [
     'наруто',
@@ -52,33 +58,51 @@ const BUILTIN_SEARCH_ALIASES = {
     'naruto shippuden',
     'наруто ураганные хроники',
     'naruto movie',
-    'naruto ova'
+    'naruto ova',
+    'naruto special',
+    'наруто фильм',
+    'наруто ова',
+    'наруто спешл'
   ],
   'наруто ураганные хроники': [
     'naruto shippuuden',
     'naruto shippuden',
     'наруто',
-    'naruto'
+    'naruto',
+    'naruto movie',
+    'naruto ova',
+    'наруто фильм',
+    'наруто ова'
   ],
   'naruto shippuden': [
     'naruto shippuuden',
     'наруто ураганные хроники',
-    'наруто'
+    'наруто',
+    'naruto movie',
+    'naruto ova'
   ],
   'naruto shippuuden': [
     'naruto shippuden',
     'наруто ураганные хроники',
-    'наруто'
+    'наруто',
+    'naruto movie',
+    'naruto ova'
   ],
   'боруто': [
     'boruto',
     'boruto naruto next generations',
-    'наруто'
+    'наруто',
+    'boruto movie',
+    'boruto ova',
+    'боруто фильм',
+    'боруто ова'
   ],
   'boruto': [
     'боруто',
     'boruto naruto next generations',
-    'naruto'
+    'naruto',
+    'boruto movie',
+    'boruto ova'
   ],
   'хантер': [
     'хантер х хантер',
@@ -87,14 +111,24 @@ const BUILTIN_SEARCH_ALIASES = {
     'охотник x охотник',
     'hunter x hunter',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova',
+    'хантер фильм',
+    'хантер ова',
+    'охотник фильм',
+    'охотник ова'
   ],
   'хантер х хантер': [
     'охотник х охотник',
     'hunter x hunter',
     'hunter × hunter',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova',
+    'хантер фильм',
+    'хантер ова'
   ],
   'хантер x хантер': [
     'охотник x охотник',
@@ -102,7 +136,11 @@ const BUILTIN_SEARCH_ALIASES = {
     'hunter x hunter',
     'hunter × hunter',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova',
+    'хантер фильм',
+    'хантер ова'
   ],
   'охотник х охотник': [
     'хантер х хантер',
@@ -110,7 +148,9 @@ const BUILTIN_SEARCH_ALIASES = {
     'hunter x hunter',
     'hunter × hunter',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova'
   ],
   'охотник x охотник': [
     'хантер x хантер',
@@ -118,7 +158,9 @@ const BUILTIN_SEARCH_ALIASES = {
     'hunter x hunter',
     'hunter × hunter',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova'
   ],
   'hunter x hunter': [
     'hunter × hunter',
@@ -126,12 +168,23 @@ const BUILTIN_SEARCH_ALIASES = {
     'охотник х охотник',
     'охотник x охотник',
     'hunter x hunter 2011',
-    'hunter x hunter 1999'
+    'hunter x hunter 1999',
+    'hunter x hunter movie',
+    'hunter x hunter ova',
+    'hunter x hunter special',
+    'хантер фильм',
+    'хантер ова',
+    'хантер 2011',
+    'хантер 1999'
   ],
   'hunter × hunter': [
     'hunter x hunter',
     'хантер х хантер',
-    'охотник х охотник'
+    'охотник х охотник',
+    'hunter x hunter movie',
+    'hunter x hunter ova',
+    'hunter x hunter 2011',
+    'hunter x hunter 1999'
   ]
 };
 
@@ -325,6 +378,10 @@ function transliterateLatToRuApprox(value) {
     .replace(/naruto/g, 'наруто')
     .replace(/boruto/g, 'боруто')
     .replace(/x/g, ' х ')
+    .replace(/movie/g, 'фильм')
+    .replace(/film/g, 'фильм')
+    .replace(/ova/g, 'ова')
+    .replace(/special/g, 'спешл')
     .replace(/shch/g, 'щ')
     .replace(/sch/g, 'щ')
     .replace(/yo/g, 'е')
@@ -463,17 +520,52 @@ function expandQueryVariants(query) {
   variants.add(normalized);
   variants.add(normalized.replace(/\s+/g, ''));
 
+  const mediaWords = [
+    'movie',
+    'film',
+    'ova',
+    'special',
+    'фильм',
+    'полнометражка',
+    'ова',
+    'спешл',
+    'спецвыпуск'
+  ];
+
+  if (!mediaWords.some(word => normalized.includes(word))) {
+    variants.add(`${normalized} movie`);
+    variants.add(`${normalized} film`);
+    variants.add(`${normalized} ova`);
+    variants.add(`${normalized} special`);
+    variants.add(`${normalized} фильм`);
+    variants.add(`${normalized} ова`);
+    variants.add(`${normalized} спешл`);
+  }
+
   const translitRuToLat = transliterateRuToLat(normalized);
   const translitLatToRu = transliterateLatToRuApprox(normalized);
 
   if (translitRuToLat) {
     variants.add(translitRuToLat);
     variants.add(translitRuToLat.replace(/\s+/g, ''));
+
+    if (!mediaWords.some(word => translitRuToLat.includes(word))) {
+      variants.add(`${translitRuToLat} movie`);
+      variants.add(`${translitRuToLat} film`);
+      variants.add(`${translitRuToLat} ova`);
+      variants.add(`${translitRuToLat} special`);
+    }
   }
 
   if (translitLatToRu) {
     variants.add(translitLatToRu);
     variants.add(translitLatToRu.replace(/\s+/g, ''));
+
+    if (!mediaWords.some(word => translitLatToRu.includes(word))) {
+      variants.add(`${translitLatToRu} фильм`);
+      variants.add(`${translitLatToRu} ова`);
+      variants.add(`${translitLatToRu} спешл`);
+    }
   }
 
   const aliasDirect = SEARCH_ALIASES_MAP.get(normalized);
@@ -494,7 +586,7 @@ function expandQueryVariants(query) {
     }
   }
 
-  return [...variants].filter(Boolean).slice(0, 16);
+  return [...variants].filter(Boolean).slice(0, 24);
 }
 
 function getSearchCacheKey(query) {
@@ -1024,7 +1116,14 @@ function normalizeTitleKey(value) {
 
 function isAllowedAnimeType(item) {
   const type = String(normalizeType(item) || '').toLowerCase();
-  return type === 'anime' || type === 'anime-serial' || type.includes('anime');
+
+  return (
+    type.includes('anime') ||
+    type.includes('film') ||
+    type.includes('movie') ||
+    type.includes('ova') ||
+    type.includes('special')
+  );
 }
 
 function isSerial(item) {
@@ -1138,6 +1237,10 @@ function primaryQueryPriority(q, normalizedQuery) {
   if (n.includes(' ')) score += 1200;
   if (!n.includes(' ') && n.length >= 8) score -= 250;
 
+  if (/\b(movie|film|ova|special|фильм|ова|спешл|спецвыпуск)\b/i.test(n)) {
+    score += 750;
+  }
+
   score += Math.min(1600, n.length * 45);
 
   const qYear = normalizedQuery.match(/\b(19|20)\d{2}\b/)?.[0];
@@ -1160,16 +1263,16 @@ function selectPrimaryKodikQueries(rawQuery, expandedQueries, normalizedQuery) {
     .sort((a, b) => b.score - a.score)
     .map(item => item.q);
 
-  let primary = scored.slice(0, 7);
+  let primary = scored.slice(0, 10);
 
   const latinBest = scored.find(q => isLatinText(q));
   if (latinBest && !primary.includes(latinBest)) {
-    primary = [latinBest, ...primary].slice(0, 7);
+    primary = [latinBest, ...primary].slice(0, 10);
   }
 
   primary = primary.filter(q => q.length >= 2);
 
-  return dedupeArray(primary).slice(0, 7);
+  return dedupeArray(primary).slice(0, 10);
 }
 
 function titleScore(item, queryVariants, normalizedQuery) {
@@ -1186,6 +1289,21 @@ function titleScore(item, queryVariants, normalizedQuery) {
   const qYear = normalizedQuery.match(/\b(19|20)\d{2}\b/)?.[0];
   const y = String(normalizeYear(item) || '');
   if (qYear && y === qYear) score += 1800;
+
+  const type = String(normalizeType(item) || '').toLowerCase();
+  const titleText = normalizeSearchText(titles.join(' '));
+
+  if (type.includes('film') || type.includes('movie') || titleText.includes('movie') || titleText.includes('фильм')) {
+    score += 900;
+  }
+
+  if (type.includes('ova') || titleText.includes('ova') || titleText.includes('ова')) {
+    score += 900;
+  }
+
+  if (type.includes('special') || titleText.includes('special') || titleText.includes('спешл')) {
+    score += 650;
+  }
 
   if (getReleaseTimestamp(item)) score += 220;
   if (isSerial(item)) score += 650;
@@ -1252,7 +1370,7 @@ function dedupeSearchResults(items, queryVariants) {
       queryVariantKeys.some(queryKey => hasStrongTitleMatch(candidate, queryKey))
     );
 
-    if (!goodMatch && item.score < 1600) continue;
+    if (!goodMatch && item.score < 900) continue;
 
     const existing = strictMap.get(groupKey);
     if (!existing) {
@@ -1517,6 +1635,8 @@ function strictMatchResults(items, selected) {
   if (filtered.length > 0) return filtered;
 
   filtered = items.filter(item => {
+    if (!isAllowedAnimeType(item)) return false;
+
     const itemTitles = getAllTitles(item).map(normalizeSearchText);
     return selectedVariants.length && itemTitles.some(itemTitle =>
       selectedVariants.some(selectedVariant =>
@@ -1552,7 +1672,7 @@ async function fetchFullEpisodesForLongAnime(results) {
       material_id: materialId,
       with_material_data: 'true',
       with_episodes: 'true',
-      types: 'anime-serial,anime'
+      types: KODIK_TYPES
     });
 
     const fullResults = Array.isArray(fullData?.results) ? fullData.results : [];
@@ -1570,13 +1690,13 @@ async function fetchAnimeBySelection(selected) {
         shikimori_id: selected.shikimoriId,
         with_material_data: 'true',
         with_episodes: 'true',
-        types: 'anime-serial,anime'
+        types: KODIK_TYPES
       }),
       kodikGet('/list', {
         shikimori_id: selected.shikimoriId,
         with_material_data: 'true',
         with_episodes: 'true',
-        types: 'anime-serial,anime'
+        types: KODIK_TYPES
       })
     ]);
 
@@ -1594,13 +1714,13 @@ async function fetchAnimeBySelection(selected) {
         id: selected.kodikId,
         with_material_data: 'true',
         with_episodes: 'true',
-        types: 'anime-serial,anime'
+        types: KODIK_TYPES
       }),
       kodikGet('/list', {
         id: selected.kodikId,
         with_material_data: 'true',
         with_episodes: 'true',
-        types: 'anime-serial,anime'
+        types: KODIK_TYPES
       })
     ]);
 
@@ -1613,7 +1733,7 @@ async function fetchAnimeBySelection(selected) {
   }
 
   if (selected?.title) {
-    const searchVariants = expandQueryVariants(selected.title).slice(0, 5);
+    const searchVariants = expandQueryVariants(selected.title).slice(0, 8);
     const requests = [];
 
     for (const variant of searchVariants) {
@@ -1622,7 +1742,7 @@ async function fetchAnimeBySelection(selected) {
           title: variant,
           with_material_data: 'true',
           with_episodes: 'true',
-          types: 'anime-serial,anime'
+          types: KODIK_TYPES
         })
       );
     }
@@ -1667,7 +1787,8 @@ app.get('/api/health/kodik', async (req, res) => {
   try {
     const data = await kodikGet('/search', {
       title: 'Naruto',
-      with_material_data: 'true'
+      with_material_data: 'true',
+      types: KODIK_TYPES
     });
 
     res.json({
@@ -1707,7 +1828,7 @@ async function handleKodikSearch(req, res) {
         title: q,
         with_material_data: 'true',
         with_episodes: 'false',
-        types: 'anime-serial,anime'
+        types: KODIK_TYPES
       })
     );
 
@@ -1720,14 +1841,11 @@ async function handleKodikSearch(req, res) {
       }
     }
 
-    rawResults = rawResults.filter(item => {
-      const type = String(normalizeType(item) || '').toLowerCase();
-      return type.includes('anime');
-    });
+    rawResults = rawResults.filter(item => isAllowedAnimeType(item));
 
     const mapped = rawResults
       .map(item => makeSearchItem(item, expandedQueries, normalizedQuery))
-      .filter(item => item.score > 0);
+      .filter(item => item.score > -500);
 
     const deduped = dedupeSearchResults(mapped, expandedQueries)
       .map(item => ({
@@ -1739,13 +1857,15 @@ async function handleKodikSearch(req, res) {
 
     const finalResults = deduped
       .filter(item => {
-        if (item.matchPriority > 4) return false;
-        if (item.score < 900 && !Number(item.year)) return false;
+        if (item.matchPriority > 5) return false;
+        if (item.score < 500 && !Number(item.year)) return false;
 
         if (!queryTokens.length) return true;
-        const haystack = normalizeSearchText([item.title, ...(item.altTitles || [])].join(' '));
 
-        return queryTokens.some(token => haystack.includes(token));
+        const haystack = normalizeSearchText([item.title, ...(item.altTitles || []), item.type].join(' '));
+
+        return queryTokens.some(token => haystack.includes(token)) ||
+          /\b(movie|film|ova|special|фильм|ова|спешл|спецвыпуск)\b/i.test(haystack);
       })
       .sort(compareSearchItemsStrictOrder)
       .slice(0, 80);
@@ -1827,10 +1947,12 @@ app.post('/api/yummy/anime/by-selection', handleKodikAnimeBySelection);
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/support', (req, res) => res.sendFile(path.join(__dirname, 'public', 'support.html')));
 app.get('/support.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'support.html')));
+
 app.get('/room/:roomId', (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
 });
+
 app.get('/room/:roomId/*', (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
   res.sendFile(path.join(__dirname, 'public', 'room.html'));
@@ -2048,6 +2170,7 @@ io.on('connection', (socket) => {
         socket.emit('join-error', { message: 'Слишком много созданий комнат с вашего IP. Попробуйте позже.' });
         return;
       }
+
       registerRoomCreationForIp(socketIp);
     }
 
@@ -2293,6 +2416,7 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('system-message', {
         text: `${username} вышел из комнаты`
       });
+
       io.to(roomId).emit('room-users', getUsersWithMeta(roomId));
 
       if (wasHost) {
