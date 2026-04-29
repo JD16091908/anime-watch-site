@@ -1,33 +1,99 @@
-/* Показываем количество серий в меню озвучек как: "2x2 (12)" */
-#overlayPlayerMenu .overlay-item-count {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+/* ================================
+   FIX: аккуратные карточки поиска
+   ================================ */
 
-  padding: 0;
-  height: auto;
-  min-width: 0;
-  border-radius: 0;
+.search-dropdown {
+  padding: 6px 0;
+  overflow-x: hidden;
+}
 
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 12px;
+.search-result-item {
+  width: calc(100% - 12px);
+  margin: 4px 6px;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.025);
+  transition:
+    background 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.search-result-item:last-child {
+  border-bottom: 0;
+}
+
+.search-result-item:hover,
+.search-result-item.active {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(143, 164, 255, 0.20),
+      rgba(255, 132, 168, 0.08)
+    );
+  transform: translateX(2px);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.search-result-item:active {
+  transform: translateX(2px) scale(0.985);
+}
+
+.search-result-poster {
+  border-radius: 9px;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.28);
+}
+
+.search-result-content {
+  padding-right: 6px;
+}
+
+.search-result-title {
   font-weight: 800;
-  line-height: 1.1;
+  font-size: 14.5px;
+  line-height: 1.32;
 }
 
-#overlayPlayerMenu .overlay-item-count::before {
-  content: "(";
-  margin-right: 1px;
-  opacity: 0.95;
+.search-result-meta {
+  opacity: 0.82;
 }
 
-#overlayPlayerMenu .overlay-item-count::after {
-  content: ")";
-  margin-left: 1px;
-  opacity: 0.95;
+.search-results-toggle {
+  width: calc(100% - 12px);
+  margin: 6px;
+  border-radius: 11px;
+  text-align: center;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(143, 164, 255, 0.18),
+      rgba(255, 132, 168, 0.12)
+    );
 }
 
-/* Чуть меньше расстояние между названием озвучки и (N) */
-#overlayPlayerMenu .overlay-dropdown-item {
-  gap: 6px;
+.search-results-toggle:hover {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(143, 164, 255, 0.26),
+      rgba(255, 132, 168, 0.18)
+    );
+}
+
+@media (max-width: 768px) {
+  .search-result-item {
+    width: calc(100% - 10px);
+    margin: 4px 5px;
+    padding: 9px;
+    border-radius: 11px;
+  }
+
+  .search-results-toggle {
+    width: calc(100% - 10px);
+    margin: 5px;
+  }
 }
