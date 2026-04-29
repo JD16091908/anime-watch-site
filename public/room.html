@@ -29,25 +29,78 @@
     }
 
     .player-area-centered {
-      margin-top: -12px;
+      margin-top: -14px;
     }
 
-    .room-ad-block {
-      margin: 10px 0 6px;
-      border-radius: 16px;
+    .room-ad-shell {
+      margin: 10px 0 4px;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at top left, rgba(123, 140, 255, 0.10), transparent 34%),
+        linear-gradient(180deg, rgba(24, 34, 58, 0.78), rgba(18, 27, 46, 0.84));
+      border: 1px solid rgba(255, 255, 255, 0.075);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
       overflow: hidden;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      backdrop-filter: blur(8px);
-      padding: 6px;
+    }
+
+    .room-ad-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px 0;
+    }
+
+    .room-ad-title {
+      color: #dbe7ff;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.35;
+      opacity: 0.9;
     }
 
     .room-ad-label {
+      color: #8f9dbc;
       font-size: 11px;
-      color: #aebad6;
-      opacity: 0.6;
-      margin-bottom: 4px;
-      padding-left: 4px;
+      font-weight: 600;
+      line-height: 1;
+      opacity: 0.72;
+      text-transform: lowercase;
+      white-space: nowrap;
+    }
+
+    .room-ad-body {
+      padding: 8px 10px 10px;
+      min-height: 92px;
+    }
+
+    .room-ad-body > div {
+      width: 100%;
+      min-height: 80px;
+    }
+
+    @media (max-width: 768px) {
+      .player-area-centered {
+        margin-top: -8px;
+      }
+
+      .room-ad-shell {
+        margin-top: 8px;
+        border-radius: 14px;
+      }
+
+      .room-ad-head {
+        padding: 9px 10px 0;
+      }
+
+      .room-ad-title {
+        font-size: 12px;
+      }
+
+      .room-ad-body {
+        padding: 7px 8px 8px;
+        min-height: 78px;
+      }
     }
   </style>
 
@@ -146,17 +199,23 @@
         </div>
       </div>
 
-      <div class="room-ad-block">
-        <div class="room-ad-label">реклама</div>
-        <div id="yandex_rtb_R-A-19183261-1"></div>
-        <script>
-          window.yaContextCb.push(() => {
-            Ya.Context.AdvManager.render({
-              blockId: "R-A-19183261-1",
-              renderTo: "yandex_rtb_R-A-19183261-1"
+      <div class="room-ad-shell" aria-label="Рекламный блок">
+        <div class="room-ad-head">
+          <div class="room-ad-title">Поддержите развитие Anivmeste</div>
+          <div class="room-ad-label">реклама</div>
+        </div>
+
+        <div class="room-ad-body">
+          <div id="yandex_rtb_R-A-19183261-1"></div>
+          <script>
+            window.yaContextCb.push(() => {
+              Ya.Context.AdvManager.render({
+                blockId: "R-A-19183261-1",
+                renderTo: "yandex_rtb_R-A-19183261-1"
+              });
             });
-          });
-        </script>
+          </script>
+        </div>
       </div>
 
     </div>
