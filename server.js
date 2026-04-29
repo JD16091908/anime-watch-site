@@ -1651,36 +1651,89 @@ function strictMatchResults(items, selected) {
 }
 
 async function fetchFullEpisodesForLongAnime(results) {
-  const first = results[0];
-  if (!first) return results;
+  const baseResults = Array.isArray(results) ? results : [];
+  const first = baseResults[0];
 
-  const currentEpisodesCount = mergeEpisodes(results).length;
-  const maxKnownEpisode = getLastEpisode(first);
+  if (!first) return baseResults;
+
+  const currentEpisodesCount = mergeEpisodes(baseResults).length;
+  const maxKnownEpisode = Math.max(
+    ...baseResults.map(item => getLastEpisode(item)).filter(Number.isFinite),
+    0
+  );
 
   if (currentEpisodesCount >= 10 || maxKnownEpisode < 20) {
-    return results;
+    return baseResults;
   }
 
   console.log(`[Long Anime Detected] ${normalizeTitle(first)} | episodes found: ${currentEpisodesCount}, last known: ${maxKnownEpisode}`);
-  console.log('Запрашиваю полный список серий по material_id');
+  console.log('Запрашиваю полный список серий по material_id / shikimori_id / title');
 
-  const materialId = getMaterialId(first);
-  if (!materialId) return results;
+  const extraResults = [];
+  const materialIds = dedupeArray(baseResults.map(getMaterialId).filter(Boolean)).slice(0, 8);
+  const shikimoriIds = dedupeArray(baseResults.map(getShikimoriId).filter(Boolean)).slice(0, 5);
 
-  try {
-    const fullData = await kodikGet('/list', {
-      material_id: materialId,
-      with_material_data: 'true',
-      with_episodes: 'true',
-      types: KODIK_TYPES
-    });
+  for (const materialId of materialIds) {
+    try {
+      const fullData = await kodikGet('/list', {
+        material_id: materialId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: KODIK_TYPES
+      });
 
-    const fullResults = Array.isArray(fullData?.results) ? fullData.results : [];
-    return [...results, ...fullResults];
-  } catch (error) {
-    console.log('Не удалось получить полный список серий:', error.message);
-    return results;
+      if (Array.isArray(fullData?.results)) {
+        extraResults.push(...fullData.results);
+      }
+    } catch (error) {
+      console.log(`Не удалось догрузить серии по material_id=${materialId}:`, error.message);
+    }
   }
+
+  for (const shikimoriId of shikimoriIds) {
+    try {
+      const fullData = await kodikGet('/list', {
+        shikimori_id: shikimoriId,
+        with_material_data: 'true',
+        with_episodes: 'true',
+        types: KODIK_TYPES
+      });
+
+      if (Array.isArray(fullData?.results)) {
+        extraResults.push(...fullData.results);
+      }
+    } catch (error) {
+      console.log(`Не удалось догрузить серии по shikimori_id=${shikimoriId}:`, error.message);
+    }
+  }
+
+  if (mergeEpisodes([...baseResults, ...extraResults]).length < 10) {
+    const titleVariants = dedupeArray(
+      baseResults
+        .flatMap(item => getAllTitles(item))
+        .flatMap(title => expandQueryVariants(title))
+        .filter(Boolean)
+    ).slice(0, 8);
+
+    for (const title of titleVariants) {
+      try {
+        const fullData = await kodikGet('/search', {
+          title,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          types: KODIK_TYPES
+        });
+
+        if (Array.isArray(fullData?.results)) {
+          extraResults.push(...fullData.results);
+        }
+      } catch (error) {
+        console.log(`Не удалось догрузить серии по title="${title}":`, error.message);
+      }
+    }
+  }
+
+  return [...baseResults, ...extraResults];
 }
 
 async function fetchAnimeBySelection(selected) {
@@ -1705,6 +1758,26 @@ async function fetchAnimeBySelection(selected) {
       ...(Array.isArray(listData?.results) ? listData.results : [])
     ];
 
+    if (mergeEpisodes(results).length < 10 && selected?.title) {
+      const searchVariants = expandQueryVariants(selected.title).slice(0, 8);
+      const responses = await Promise.allSettled(
+        searchVariants.map(variant =>
+          kodikGet('/search', {
+            title: variant,
+            with_material_data: 'true',
+            with_episodes: 'true',
+            types: KODIK_TYPES
+          })
+        )
+      );
+
+      for (const response of responses) {
+        if (response.status === 'fulfilled' && Array.isArray(response.value?.results)) {
+          results.push(...response.value.results);
+        }
+      }
+    }
+
     return await fetchFullEpisodesForLongAnime(results);
   }
 
@@ -1728,6 +1801,26 @@ async function fetchAnimeBySelection(selected) {
       ...(Array.isArray(searchData?.results) ? searchData.results : []),
       ...(Array.isArray(listData?.results) ? listData.results : [])
     ];
+
+    if (mergeEpisodes(results).length < 10 && selected?.title) {
+      const searchVariants = expandQueryVariants(selected.title).slice(0, 8);
+      const responses = await Promise.allSettled(
+        searchVariants.map(variant =>
+          kodikGet('/search', {
+            title: variant,
+            with_material_data: 'true',
+            with_episodes: 'true',
+            types: KODIK_TYPES
+          })
+        )
+      );
+
+      for (const response of responses) {
+        if (response.status === 'fulfilled' && Array.isArray(response.value?.results)) {
+          results.push(...response.value.results);
+        }
+      }
+    }
 
     return await fetchFullEpisodesForLongAnime(results);
   }
@@ -1893,6 +1986,8 @@ async function handleKodikAnimeBySelection(req, res) {
     if (!results.length) {
       return res.status(404).json({ error: 'Не удалось точно определить выбранное аниме' });
     }
+
+    results = await fetchFullEpisodesForLongAnime(results);
 
     const selectedVariants = expandQueryVariants(selected.title);
     const first = results.find(item =>
