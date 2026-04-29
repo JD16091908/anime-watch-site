@@ -20,9 +20,34 @@
   <link rel="stylesheet" href="/room-mobile-fix.css" />
   <link rel="stylesheet" href="/overlay-patch.css" />
 
+  <script>window.yaContextCb = window.yaContextCb || [];</script>
+  <script src="https://yandex.ru/ads/system/context.js" async></script>
+
   <style>
     .hidden {
       display: none !important;
+    }
+
+    .player-area-centered {
+      margin-top: -12px;
+    }
+
+    .room-ad-block {
+      margin: 10px 0 6px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(8px);
+      padding: 6px;
+    }
+
+    .room-ad-label {
+      font-size: 11px;
+      color: #aebad6;
+      opacity: 0.6;
+      margin-bottom: 4px;
+      padding-left: 4px;
     }
   </style>
 
@@ -119,6 +144,19 @@
           </div>
 
         </div>
+      </div>
+
+      <div class="room-ad-block">
+        <div class="room-ad-label">реклама</div>
+        <div id="yandex_rtb_R-A-19183261-1"></div>
+        <script>
+          window.yaContextCb.push(() => {
+            Ya.Context.AdvManager.render({
+              blockId: "R-A-19183261-1",
+              renderTo: "yandex_rtb_R-A-19183261-1"
+            });
+          });
+        </script>
       </div>
 
     </div>
