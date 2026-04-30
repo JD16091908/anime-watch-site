@@ -1969,3 +1969,56 @@ updateSelectedAnimeInfoContent(null);
 showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
 renderUsers([]);
 startUsersRenderTicker();
+
+/* ===== FIX: надежное закрытие окна поддержки ===== */
+(() => {
+  const modal = document.getElementById('roomSupportModal');
+  const openBtn = document.getElementById('supportRoomBtn');
+  const closeBtn = document.getElementById('closeRoomSupportModalBtn');
+  const backdrop = document.getElementById('roomSupportModalBackdrop');
+
+  if (!modal || !openBtn) return;
+
+  function forceOpenSupportModal(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    modal.classList.remove('hidden', 'is-hiding');
+    modal.classList.add('is-visible');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+  }
+
+  function forceCloseSupportModal(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    modal.classList.remove('is-visible');
+    modal.classList.add('is-hiding');
+
+    setTimeout(() => {
+      modal.classList.add('hidden');
+      modal.classList.remove('is-hiding');
+      modal.setAttribute('aria-hidden', 'true');
+      modal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }, 180);
+  }
+
+  openBtn.addEventListener('click', forceOpenSupportModal, true);
+  closeBtn?.addEventListener('click', forceCloseSupportModal, true);
+  backdrop?.addEventListener('click', forceCloseSupportModal, true);
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      forceCloseSupportModal(event);
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+      forceCloseSupportModal(event);
+    }
+  }, true);
+})();
