@@ -175,4 +175,75 @@
   .room-page .nickname-save-btn {
     min-height: 42px;
   }
+
+}
+/* === НОРМАЛЬНАЯ КНОПКА ЛОГОТИПА AniVmeste === */
+
+.room-page .logo-btn {
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+  padding: 0 16px 0 12px;
+  gap: 9px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(160, 180, 255, 0.34);
+
+  background:
+    linear-gradient(180deg, rgba(92, 112, 205, 0.92), rgba(62, 77, 155, 0.94));
+
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+  overflow: visible;
+}
+
+.room-page .logo-btn::before,
+.room-page .logo-btn::after {
+  display: none;
+}
+
+.room-page .logo-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  border-color: rgba(190, 205, 255, 0.48);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.34),
+    0 0 18px rgba(130, 150, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.room-page .logo-btn-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.room-page .logo-btn-text {
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  text-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .room-page .logo-btn {
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
+    padding: 0 14px 0 11px;
+  }
+
+  .room-page .logo-btn-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .room-page .logo-btn-text {
+    font-size: 18px;
+  }
 }
