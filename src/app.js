@@ -8,23 +8,10 @@ const {
   animeBySelection
 } = require('./services/kodik');
 
+const { isAllowedOrigin } = require('./server-config');
+
 const app = express();
 app.set('trust proxy', 1);
-
-/* ================= CONFIG ================= */
-
-const ALLOWED_ORIGINS = new Set([
-  'https://anivmeste.ru',
-  'https://www.anivmeste.ru',
-  'https://anivmeste.onrender.com'
-]);
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  return ALLOWED_ORIGINS.has(origin);
-}
-
-/* ================= MIDDLEWARE ================= */
 
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
@@ -39,111 +26,142 @@ app.use((req, res, next) => {
 });
 
 app.use(helmet({
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false
 }));
 
 app.use(express.json({ limit: '1mb' }));
 
-/* ================= RATE LIMIT ================= */
-
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 240
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
 
 app.use(globalLimiter);
 app.use('/api', apiLimiter);
 
-/* ================= STATIC ================= */
-
 app.use(express.static(path.join(__dirname, '../public'), {
+  extensions: false,
   index: false,
   maxAge: '1h'
 }));
 
-/* ================= API ================= */
-
-// 🔍 поиск
 app.get('/api/kodik/search', async (req, res) => {
   try {
-    const q = (req.query.q || '').trim();
+    const q = String(req.query.q || '').trim();
 
     if (!q || q.length < 2) {
-      return res.status(400).json({ error: 'Минимум 2 символа' });
+      return res.status(400).json({ error: 'Введите минимум 2 символа для поиска' });
     }
 
     const result = await searchAnime(q);
-    res.json(result);
-  } catch (e) {
-    console.error('SEARCH ERROR:', e.message);
-    res.status(500).json({ error: 'Ошибка поиска' });
+    return res.json(result);
+  } catch (error) {
+    console.error('KODIK SEARCH ERROR:', error.message);
+    return res.status(500).json({ error: 'Ошибка поиска', details: error.message });
   }
 });
 
-// 🎬 получение аниме
 app.post('/api/kodik/anime/by-selection', async (req, res) => {
   try {
     const selected = req.body || {};
 
+    if (!selected?.title && !selected?.shikimoriId && !selected?.kodikId) {
+      return res.status(400).json({ error: 'Недостаточно данных для выбора аниме' });
+    }
+
     const result = await animeBySelection(selected);
 
     if (!result) {
-      return res.status(404).json({ error: 'Аниме не найдено' });
+      return res.status(404).json({ error: 'Не удалось точно определить выбранное аниме' });
     }
 
-    res.json(result);
-  } catch (e) {
-    console.error('ANIME ERROR:', e.message);
-    res.status(500).json({ error: 'Ошибка загрузки аниме' });
+    return res.json(result);
+  } catch (error) {
+    console.error('KODIK ANIME BY SELECTION ERROR:', error.message);
+    return res.status(500).json({ error: 'Не удалось загрузить аниме', details: error.message });
   }
 });
 
-// алиасы (оставляем как было)
 app.get('/api/yummy/search', async (req, res) => {
   try {
-    const q = (req.query.q || '').trim();
+    const q = String(req.query.q || '').trim();
+
+    if (!q || q.length < 2) {
+      return res.status(400).json({ error: 'Введите минимум 2 символа для поиска' });
+    }
+
     const result = await searchAnime(q);
-    res.json(result);
-  } catch {
-    res.status(500).json({ error: 'Ошибка' });
+    return res.json(result);
+  } catch (error) {
+    console.error('YUMMY SEARCH ERROR:', error.message);
+    return res.status(500).json({ error: 'Ошибка поиска', details: error.message });
   }
 });
 
 app.post('/api/yummy/anime/by-selection', async (req, res) => {
   try {
-    const result = await animeBySelection(req.body);
-    res.json(result);
-  } catch {
-    res.status(500).json({ error: 'Ошибка' });
+    const result = await animeBySelection(req.body || {});
+
+    if (!result) {
+      return res.status(404).json({ error: 'Не удалось точно определить выбранное аниме' });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error('YUMMY ANIME BY SELECTION ERROR:', error.message);
+    return res.status(500).json({ error: 'Не удалось загрузить аниме', details: error.message });
   }
 });
 
-/* ================= PAGES ================= */
+app.get('/room.html', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  return res.redirect(301, '/');
+});
+
+app.get('/room/:roomId', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  return res.sendFile(path.join(__dirname, '../public/room.html'));
+});
+
+app.get('/room/:roomId/*', (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  return res.sendFile(path.join(__dirname, '../public/room.html'));
+});
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  return res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 app.get('/support', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/support.html'));
+  return res.sendFile(path.join(__dirname, '../public/support.html'));
 });
 
-/* ================= 404 ================= */
+app.get('/support.html', (req, res) => {
+  return res.sendFile(path.join(__dirname, '../public/support.html'));
+});
 
 app.use('/api', (req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     error: 'API route not found',
+    method: req.method,
     path: req.originalUrl
   });
 });
 
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  return res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 module.exports = app;

@@ -11,7 +11,6 @@ const io = new Server(server, {
   transports: ['websocket', 'polling'],
   pingInterval: 25000,
   pingTimeout: 20000,
-
   cors: {
     origin: (origin, callback) => {
       if (!origin || isAllowedOrigin(origin)) {
@@ -21,19 +20,15 @@ const io = new Server(server, {
     },
     credentials: true
   },
-
   allowRequest: (req, callback) => {
     const origin = req.headers.origin;
-
     if (!origin || isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-
     return callback('Origin not allowed', false);
   }
 });
 
-// 🔌 подключаем сокеты
 registerRoomSockets(io);
 
 server.listen(PORT, '0.0.0.0', () => {
