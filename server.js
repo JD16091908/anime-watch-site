@@ -1,7 +1,7 @@
 const http = require('http');
 const { Server } = require('socket.io');
 
-const { app } = require('./src/app');
+const app = require('./src/app');
 const { PORT, isAllowedOrigin } = require('./src/server-config');
 const { registerRoomSockets } = require('./src/sockets/rooms');
 

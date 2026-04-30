@@ -1,0 +1,159 @@
+/* UI fix: зрители сверху, чат ниже, красивые спокойные кнопки */
+
+.right-sidebar {
+  gap: 12px;
+}
+
+.right-sidebar > .chat-block {
+  order: 2;
+  margin-bottom: 0;
+}
+
+.right-sidebar > .block:nth-of-type(2) {
+  order: 3;
+  margin-bottom: 0;
+}
+
+.right-sidebar > .block:nth-of-type(3) {
+  order: 1;
+  margin-bottom: 0;
+}
+
+.right-sidebar > .block:nth-of-type(3) .users-list {
+  max-height: 185px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chat-block {
+  min-height: 0;
+  flex: 1;
+}
+
+.chat-messages {
+  min-height: 260px;
+}
+
+/* Верхние кнопки: Пригласить / Кино / Поддержать */
+.room-page #copyLinkBtn,
+.room-page #cinemaModeBtn,
+.room-page #supportRoomBtn {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 17px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  color: #f7f9ff;
+  border: 1px solid rgba(165, 185, 255, 0.36);
+  background:
+    linear-gradient(180deg, rgba(170, 188, 255, 0.23), rgba(102, 122, 210, 0.13)),
+    rgba(255, 255, 255, 0.055);
+  box-shadow:
+    0 10px 22px rgba(28, 42, 92, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.room-page #copyLinkBtn:hover,
+.room-page #cinemaModeBtn:hover,
+.room-page #supportRoomBtn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(190, 205, 255, 0.54);
+  background:
+    linear-gradient(180deg, rgba(185, 201, 255, 0.30), rgba(115, 137, 225, 0.18)),
+    rgba(255, 255, 255, 0.075);
+  box-shadow:
+    0 13px 28px rgba(36, 54, 118, 0.34),
+    0 0 22px rgba(143, 164, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* Поддержать — чуть теплее, но не кислотно */
+.room-page #supportRoomBtn {
+  border-color: rgba(255, 174, 202, 0.38);
+  background:
+    linear-gradient(180deg, rgba(255, 155, 188, 0.24), rgba(141, 126, 235, 0.14)),
+    rgba(255, 255, 255, 0.055);
+}
+
+.room-page #supportRoomBtn:hover {
+  border-color: rgba(255, 190, 215, 0.56);
+  background:
+    linear-gradient(180deg, rgba(255, 169, 199, 0.30), rgba(151, 138, 245, 0.18)),
+    rgba(255, 255, 255, 0.075);
+}
+
+/* Кнопки Boosty / DonationAlerts — одинаковые, заметные, спокойные */
+.room-support-link,
+.room-support-link-boosty,
+.room-support-link-da {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(180, 198, 255, 0.38);
+  background:
+    linear-gradient(180deg, rgba(165, 184, 255, 0.28), rgba(96, 118, 215, 0.18)),
+    rgba(255, 255, 255, 0.055);
+  box-shadow:
+    0 12px 26px rgba(35, 49, 105, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.room-support-link:hover,
+.room-support-link-boosty:hover,
+.room-support-link-da:hover {
+  transform: translateY(-1px);
+  border-color: rgba(203, 216, 255, 0.56);
+  background:
+    linear-gradient(180deg, rgba(182, 198, 255, 0.34), rgba(112, 134, 230, 0.22)),
+    rgba(255, 255, 255, 0.075);
+  box-shadow:
+    0 15px 32px rgba(39, 56, 125, 0.38),
+    0 0 24px rgba(143, 164, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.room-support-link:active,
+.room-support-link-boosty:active,
+.room-support-link-da:active {
+  transform: translateY(0);
+}
+
+/* На мобилке зрители не должны съедать экран */
+@media (max-width: 1200px) {
+  .right-sidebar > .block:nth-of-type(3) .users-list {
+    max-height: 240px;
+  }
+
+  .chat-block {
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 768px) {
+  .room-page #copyLinkBtn,
+  .room-page #cinemaModeBtn,
+  .room-page #supportRoomBtn {
+    width: 100%;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .right-sidebar > .block:nth-of-type(3) .users-list {
+    max-height: 210px;
+  }
+}
