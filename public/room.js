@@ -2022,3 +2022,60 @@ startUsersRenderTicker();
     }
   }, true);
 })();
+
+/* ===== ЖЁСТКИЙ FIX: закрытие окна поддержки ===== */
+(() => {
+  const modal = document.getElementById('roomSupportModal');
+
+  function hardCloseSupportModal(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+
+    if (!modal) return;
+
+    modal.classList.add('hidden');
+    modal.classList.remove('is-visible', 'is-hiding');
+    modal.setAttribute('aria-hidden', 'true');
+    modal.style.setProperty('display', 'none', 'important');
+    document.body.classList.remove('modal-open');
+  }
+
+  function hardOpenSupportModal(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+
+    if (!modal) return;
+
+    modal.style.removeProperty('display');
+    modal.classList.remove('hidden', 'is-hiding');
+    modal.classList.add('is-visible');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#supportRoomBtn')) {
+      hardOpenSupportModal(event);
+      return;
+    }
+
+    if (
+      event.target.closest('#closeRoomSupportModalBtn') ||
+      event.target.closest('#roomSupportModalBackdrop')
+    ) {
+      hardCloseSupportModal(event);
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      hardCloseSupportModal(event);
+    }
+  }, true);
+})();
