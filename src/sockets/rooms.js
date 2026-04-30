@@ -1,4 +1,4 @@
-const rooms = new Map(); 
+const rooms = new Map();
 // roomId -> { users: Map(userKey -> user), hostKey, state }
 
 function createEmptyState() {
@@ -24,16 +24,17 @@ function getRoom(roomId) {
       state: createEmptyState()
     });
   }
+
   return rooms.get(roomId);
 }
 
 function buildUsersList(room) {
-  return [...room.users.values()].map(u => ({
-    username: u.username,
-    isHost: u.userKey === room.hostKey,
-    currentTime: u.currentTime || 0,
-    playbackPaused: !!u.paused,
-    timeUpdatedAt: u.timeUpdatedAt || 0
+  return [...room.users.values()].map((user) => ({
+    username: user.username,
+    isHost: user.userKey === room.hostKey,
+    currentTime: user.currentTime || 0,
+    playbackPaused: !!user.paused,
+    timeUpdatedAt: user.timeUpdatedAt || 0
   }));
 }
 
@@ -42,13 +43,10 @@ function emitUsers(io, roomId, room) {
 }
 
 function registerRoomSockets(io) {
-
   io.on('connection', (socket) => {
-
     let currentRoomId = null;
     let currentUserKey = null;
 
-    // 🔗 Вход в комнату
     socket.on('join-room', ({ roomId, username, userKey }) => {
       if (!roomId || !userKey) return;
 
@@ -56,36 +54,29 @@ function registerRoomSockets(io) {
       currentUserKey = userKey;
 
       const room = getRoom(roomId);
-
-      socket.join(roomId);
-
-      // ❗️ ВАЖНО: убираем старое подключение с таким же userKey
       const existingUser = room.users.get(userKey);
 
-      if (existingUser) {
-        // удаляем старый сокет
-        if (existingUser.socketId && existingUser.socketId !== socket.id) {
-          const oldSocket = io.sockets.sockets.get(existingUser.socketId);
-          if (oldSocket) oldSocket.disconnect(true);
-        }
+      if (existingUser?.socketId && existingUser.socketId !== socket.id) {
+        const oldSocket = io.sockets.sockets.get(existingUser.socketId);
+        if (oldSocket) oldSocket.disconnect(true);
       }
+
+      socket.join(roomId);
 
       room.users.set(userKey, {
         userKey,
         username,
         socketId: socket.id,
-        currentTime: 0,
-        paused: true,
-        timeUpdatedAt: Date.now()
+        currentTime: existingUser?.currentTime || 0,
+        paused: existingUser?.paused ?? true,
+        timeUpdatedAt: existingUser?.timeUpdatedAt || Date.now()
       });
 
-      // 👑 если хоста нет — назначаем
       if (!room.hostKey) {
         room.hostKey = userKey;
         socket.emit('you-are-host');
       }
 
-      // 🔁 отправка состояния
       socket.emit('sync-state', {
         ...room.state,
         isHost: room.hostKey === userKey
@@ -94,8 +85,9 @@ function registerRoomSockets(io) {
       emitUsers(io, roomId, room);
     });
 
-    // 🔄 смена ника
     socket.on('change-username', ({ roomId, username }) => {
+      if (!roomId || !currentUserKey) return;
+
       const room = getRoom(roomId);
       const user = room.users.get(currentUserKey);
       if (!user) return;
@@ -104,29 +96,33 @@ function registerRoomSockets(io) {
       emitUsers(io, roomId, room);
     });
 
-    // ⏱ обновление времени пользователя
     socket.on('update-user-time', ({ roomId, currentTime, paused }) => {
+      if (!roomId || !currentUserKey) return;
+
       const room = getRoom(roomId);
       const user = room.users.get(currentUserKey);
       if (!user) return;
 
-      user.currentTime = currentTime;
-      user.paused = paused;
+      user.currentTime = Number.isFinite(Number(currentTime)) ? Number(currentTime) : 0;
+      user.paused = !!paused;
       user.timeUpdatedAt = Date.now();
+
+      emitUsers(io, roomId, room);
     });
 
-    // 🎬 смена видео
-    socket.on('change-video', (data) => {
-      const room = getRoom(data.roomId);
+    socket.on('change-video', (data = {}) => {
+      const roomId = data.roomId;
+      if (!roomId || !currentUserKey) return;
 
+      const room = getRoom(roomId);
       if (room.hostKey !== currentUserKey) return;
 
       room.state = {
-        animeId: data.animeId,
-        animeUrl: data.animeUrl,
-        episodeNumber: data.episodeNumber,
-        embedUrl: data.embedUrl,
-        title: data.title,
+        animeId: data.animeId ?? null,
+        animeUrl: data.animeUrl ?? null,
+        episodeNumber: data.episodeNumber ?? null,
+        embedUrl: data.embedUrl ?? null,
+        title: data.title ?? null,
         playback: {
           paused: true,
           currentTime: 0,
@@ -134,25 +130,27 @@ function registerRoomSockets(io) {
         }
       };
 
-      io.to(data.roomId).emit('video-changed', room.state);
+      io.to(roomId).emit('video-changed', room.state);
     });
 
-    // ▶️ управление плеером
-    socket.on('player-control', (data) => {
-      const room = getRoom(data.roomId);
+    socket.on('player-control', (data = {}) => {
+      const roomId = data.roomId;
+      if (!roomId || !currentUserKey) return;
 
+      const room = getRoom(roomId);
       if (room.hostKey !== currentUserKey) return;
 
-      if (typeof data.currentTime === 'number') {
+      if (typeof data.currentTime === 'number' && !Number.isNaN(data.currentTime)) {
         room.state.playback.currentTime = data.currentTime;
       }
 
       if (data.action === 'play') room.state.playback.paused = false;
       if (data.action === 'pause') room.state.playback.paused = true;
+      if (typeof data.paused === 'boolean') room.state.playback.paused = data.paused;
 
       room.state.playback.updatedAt = Date.now();
 
-      socket.to(data.roomId).emit('player-control', {
+      socket.to(roomId).emit('player-control', {
         action: data.action,
         currentTime: room.state.playback.currentTime,
         paused: room.state.playback.paused,
@@ -160,8 +158,9 @@ function registerRoomSockets(io) {
       });
     });
 
-    // 🔁 запрос синка
     socket.on('request-sync', ({ roomId }) => {
+      if (!roomId) return;
+
       const room = getRoom(roomId);
 
       socket.emit('sync-state', {
@@ -170,8 +169,9 @@ function registerRoomSockets(io) {
       });
     });
 
-    // 💬 чат
     socket.on('chat-message', ({ roomId, username, message }) => {
+      if (!roomId || !message) return;
+
       io.to(roomId).emit('chat-message', {
         username,
         message,
@@ -182,67 +182,42 @@ function registerRoomSockets(io) {
       });
     });
 
-    // ❌ выход
     socket.on('disconnect', () => {
       if (!currentRoomId || !currentUserKey) return;
 
       const room = getRoom(currentRoomId);
       const user = room.users.get(currentUserKey);
-
       if (!user) return;
 
-      // удаляем только если это тот же сокет
-      if (user.socketId === socket.id) {
-        room.users.delete(currentUserKey);
+      if (user.socketId !== socket.id) return;
 
-        // если вышел хост — назначаем нового
-        if (room.hostKey === currentUserKey) {
-          const next = [...room.users.keys()][0];
-          room.hostKey = next || null;
+      room.users.delete(currentUserKey);
 
-          if (next) {
-            const nextUser = room.users.get(next);
-            const nextSocket = io.sockets.sockets.get(nextUser.socketId);
-            if (nextSocket) nextSocket.emit('you-are-host');
+      if (room.hostKey === currentUserKey) {
+        const nextUserKey = [...room.users.keys()][0] || null;
+        room.hostKey = nextUserKey;
+
+        if (nextUserKey) {
+          const nextUser = room.users.get(nextUserKey);
+          const nextSocket = io.sockets.sockets.get(nextUser.socketId);
+
+          if (nextSocket) {
+            nextSocket.emit('you-are-host');
+            nextSocket.emit('sync-state', {
+              ...room.state,
+              isHost: true
+            });
           }
         }
+      }
 
-        emitUsers(io, currentRoomId, room);
+      emitUsers(io, currentRoomId, room);
+
+      if (room.users.size === 0) {
+        rooms.delete(currentRoomId);
       }
     });
-
   });
 }
 
 module.exports = { registerRoomSockets };
-
-function setupRoomSupportModal() {
-  const modal = document.getElementById('roomSupportModal');
-  const openBtn = document.getElementById('supportRoomBtn');
-  const closeBtn = document.getElementById('closeRoomSupportModalBtn');
-  const backdrop = document.getElementById('roomSupportModalBackdrop');
-
-  if (!modal || !openBtn) return;
-
-  const open = () => {
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-  };
-
-  const close = () => {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('modal-open');
-  };
-
-  openBtn.addEventListener('click', open);
-  closeBtn?.addEventListener('click', close);
-  backdrop?.addEventListener('click', close);
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') close();
-  });
-}
-
-document.addEventListener('DOMContentLoaded', setupRoomSupportModal);
