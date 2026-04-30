@@ -1504,3 +1504,63 @@ body {
 .overlay-dropdown-menu-episodes::-webkit-scrollbar-corner {
   background: #111a2d;
 }
+
+/* ===== Крестик модалки ===== */
+
+#closeRoomSupportModalBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: #cbd6ff;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s ease;
+}
+
+#closeRoomSupportModalBtn:hover {
+  background: rgba(255,255,255,0.10);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+#closeRoomSupportModalBtn:active {
+  transform: scale(0.95);
+}
+
+#roomSupportModal > div:last-child {
+  backdrop-filter: blur(14px);
+  background:
+    linear-gradient(180deg, rgba(30,40,66,0.95), rgba(18,26,46,0.95));
+}
+
+/* кнопки */
+.room-support-link {
+  display: block;
+  padding: 14px;
+  border-radius: 16px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  transition: 0.2s ease;
+}
+
+.room-support-link:hover {
+  background: rgba(255,255,255,0.12);
+  transform: translateY(-1px);
+}
+
+.room-support-link-boosty {
+  background: linear-gradient(135deg, #f5a623, #ffcc4d);
+  color: #1b1300;
+}
+
+.room-support-link-da {
+  background: linear-gradient(135deg, #7b8cff, #ff84a8);
+}

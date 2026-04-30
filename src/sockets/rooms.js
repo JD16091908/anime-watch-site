@@ -215,3 +215,34 @@ function registerRoomSockets(io) {
 }
 
 module.exports = { registerRoomSockets };
+
+function setupRoomSupportModal() {
+  const modal = document.getElementById('roomSupportModal');
+  const openBtn = document.getElementById('supportRoomBtn');
+  const closeBtn = document.getElementById('closeRoomSupportModalBtn');
+  const backdrop = document.getElementById('roomSupportModalBackdrop');
+
+  if (!modal || !openBtn) return;
+
+  const open = () => {
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+  };
+
+  const close = () => {
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+  };
+
+  openBtn.addEventListener('click', open);
+  closeBtn?.addEventListener('click', close);
+  backdrop?.addEventListener('click', close);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', setupRoomSupportModal);
