@@ -28,6 +28,8 @@ const roomCreationLog = new Map();
 const SEARCH_ALIASES_FILE = path.join(__dirname, 'search-aliases.json');
 const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 300;
+const SEARCH_REQUEST_TIMEOUT_MS = 6500;
+const API_REQUEST_TIMEOUT_MS = 11000;
 const searchResponseCache = new Map();
 const dnsAvailabilityCache = new Map();
 
@@ -36,6 +38,17 @@ const SHIKI_SEARCH_CACHE_MAX_ENTRIES = 250;
 const shikimoriSearchCache = new Map();
 
 const KODIK_TYPES = 'anime-serial,anime,anime-film,anime-ova,anime-special';
+
+const YANDEX_CSP_HOSTS = [
+  'https://yandex.ru',
+  'https://*.yandex.ru',
+  'https://yastatic.net',
+  'https://*.yastatic.net',
+  'https://an.yandex.ru',
+  'https://*.an.yandex.ru',
+  'https://mc.yandex.ru',
+  'https://*.mc.yandex.ru'
+];
 
 const BUILTIN_SEARCH_ALIASES = {
   'наруто': [
@@ -224,9 +237,24 @@ app.use(helmet({
       baseUri: ["'self'"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        ...YANDEX_CSP_HOSTS
+      ],
+      scriptSrcElem: [
+        "'self'",
+        "'unsafe-inline'",
+        ...YANDEX_CSP_HOSTS
+      ],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      imgSrc: [
+        "'self'",
+        'data:',
+        'blob:',
+        'https:',
+        ...YANDEX_CSP_HOSTS
+      ],
       fontSrc: ["'self'", 'data:', 'https:'],
       connectSrc: [
         "'self'",
@@ -234,9 +262,21 @@ app.use(helmet({
         'ws:',
         'https://anivmeste.ru',
         'https://www.anivmeste.ru',
-        'https://anivmeste.onrender.com'
+        'https://anivmeste.onrender.com',
+        ...YANDEX_CSP_HOSTS
       ],
-      frameSrc: ["'self'", 'https:', 'http:'],
+      frameSrc: [
+        "'self'",
+        'https:',
+        'http:',
+        ...YANDEX_CSP_HOSTS
+      ],
+      childSrc: [
+        "'self'",
+        'https:',
+        'http:',
+        ...YANDEX_CSP_HOSTS
+      ],
       mediaSrc: ["'self'", 'https:', 'http:'],
       manifestSrc: ["'self'"],
       upgradeInsecureRequests: []
@@ -920,10 +960,14 @@ async function checkHostAvailable(hostname) {
   }
 }
 
-async function kodikGet(endpoint, params = {}) {
+async function kodikGet(endpoint, params = {}, options = {}) {
   if (!await checkHostAvailable('kodik-api.com')) {
     throw new Error('DNS failed for kodik-api.com');
   }
+
+  const timeoutMs = Number(options.timeoutMs || API_REQUEST_TIMEOUT_MS) || API_REQUEST_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   const queryParams = {
     token: KODIK_TOKEN,
@@ -939,26 +983,37 @@ async function kodikGet(endpoint, params = {}) {
 
   const url = `${KODIK_API_BASE}${endpoint}?${new URLSearchParams(queryParams).toString()}`;
 
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { Accept: 'application/json' }
-  });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`Kodik HTTP ${response.status}: ${text.slice(0, 300)}`);
-  }
-
-  let data;
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Invalid JSON: ${text.slice(0, 300)}`);
-  }
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
 
-  if (data?.failed) throw new Error(data.failed);
-  return data;
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`Kodik HTTP ${response.status}: ${text.slice(0, 300)}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Invalid JSON: ${text.slice(0, 300)}`);
+    }
+
+    if (data?.failed) throw new Error(data.failed);
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`Kodik timeout after ${timeoutMs}ms`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function shikimoriGet(endpoint) {
@@ -1238,7 +1293,7 @@ function primaryQueryPriority(q, normalizedQuery) {
   if (!n.includes(' ') && n.length >= 8) score -= 250;
 
   if (/\b(movie|film|ova|special|фильм|ова|спешл|спецвыпуск)\b/i.test(n)) {
-    score += 750;
+    score += 450;
   }
 
   score += Math.min(1600, n.length * 45);
@@ -1250,11 +1305,26 @@ function primaryQueryPriority(q, normalizedQuery) {
 }
 
 function selectPrimaryKodikQueries(rawQuery, expandedQueries, normalizedQuery) {
-  const candidates = dedupeArray([
+  const exactCandidates = [
     rawQuery,
     normalizedQuery,
-    ...(expandedQueries || [])
-  ])
+    transliterateRuToLat(normalizedQuery),
+    transliterateLatToRuApprox(normalizedQuery)
+  ];
+
+  const aliasCandidates = (expandedQueries || [])
+    .filter(Boolean)
+    .filter(q => {
+      const normalized = normalizeSearchText(q);
+      if (!normalized) return false;
+
+      const hasMediaWord = /\b(movie|film|ova|special|фильм|ова|спешл|спецвыпуск)\b/i.test(normalized);
+      const queryHasMediaWord = /\b(movie|film|ova|special|фильм|ова|спешл|спецвыпуск)\b/i.test(normalizedQuery);
+
+      return queryHasMediaWord || !hasMediaWord;
+    });
+
+  const candidates = dedupeArray([...exactCandidates, ...aliasCandidates])
     .map(q => normalizeSearchText(q))
     .filter(Boolean);
 
@@ -1263,16 +1333,19 @@ function selectPrimaryKodikQueries(rawQuery, expandedQueries, normalizedQuery) {
     .sort((a, b) => b.score - a.score)
     .map(item => item.q);
 
-  let primary = scored.slice(0, 10);
+  const primary = [];
+
+  for (const q of scored) {
+    if (!primary.includes(q)) primary.push(q);
+    if (primary.length >= 5) break;
+  }
 
   const latinBest = scored.find(q => isLatinText(q));
   if (latinBest && !primary.includes(latinBest)) {
-    primary = [latinBest, ...primary].slice(0, 10);
+    primary.unshift(latinBest);
   }
 
-  primary = primary.filter(q => q.length >= 2);
-
-  return dedupeArray(primary).slice(0, 10);
+  return dedupeArray(primary.filter(q => q.length >= 2)).slice(0, 5);
 }
 
 function titleScore(item, queryVariants, normalizedQuery) {
@@ -1840,12 +1913,12 @@ async function fetchAnimeBySelection(selected) {
       );
     }
 
-    const responses = await Promise.all(requests);
+    const responses = await Promise.allSettled(requests);
     const results = [];
 
     for (const response of responses) {
-      if (Array.isArray(response?.results)) {
-        results.push(...response.results);
+      if (response.status === 'fulfilled' && Array.isArray(response.value?.results)) {
+        results.push(...response.value.results);
       }
     }
 
@@ -1916,22 +1989,28 @@ async function handleKodikSearch(req, res) {
       normalizedQuery
     );
 
-    const requests = primaryQueries.map(q =>
-      kodikGet('/search', {
-        title: q,
-        with_material_data: 'true',
-        with_episodes: 'false',
-        types: KODIK_TYPES
-      })
+    const responses = await Promise.allSettled(
+      primaryQueries.map(q =>
+        kodikGet('/search', {
+          title: q,
+          with_material_data: 'true',
+          with_episodes: 'false',
+          types: KODIK_TYPES
+        }, {
+          timeoutMs: SEARCH_REQUEST_TIMEOUT_MS
+        })
+      )
     );
-
-    const responses = await Promise.all(requests);
 
     let rawResults = [];
     for (const response of responses) {
-      if (Array.isArray(response?.results)) {
-        rawResults.push(...response.results);
+      if (response.status === 'fulfilled' && Array.isArray(response.value?.results)) {
+        rawResults.push(...response.value.results);
       }
+    }
+
+    if (!rawResults.length) {
+      return res.json([]);
     }
 
     rawResults = rawResults.filter(item => isAllowedAnimeType(item));
