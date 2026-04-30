@@ -163,6 +163,7 @@ let activeSearchAbortController = null;
 let lastRenderedSearchSignature = '';
 let lastUserTimeEmitAtClient = 0;
 let currentLoadedEmbedUrl = null;
+let roomSupportCloseTimer = null;
 
 const clientSearchCache = new Map();
 
@@ -222,6 +223,13 @@ if (roomSupportDescription) roomSupportDescription.textContent = SUPPORT_CONFIG.
 if (roomSupportThanks) roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText || '';
 if (roomSupportBoostyLink) roomSupportBoostyLink.href = BOOSTY_URL;
 if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
+
+if (roomSupportModal) {
+  roomSupportModal.classList.add('hidden');
+  roomSupportModal.classList.remove('is-visible', 'is-hiding');
+  roomSupportModal.setAttribute('aria-hidden', 'true');
+  roomSupportModal.style.setProperty('display', 'none', 'important');
+}
 
 if (!window.AnivmesteDebounce) {
   window.AnivmesteDebounce = function debounce(fn, wait = 300) {
@@ -301,26 +309,53 @@ function playChatSound() {
   }
 }
 
-function openRoomSupportModal() {
+function openRoomSupportModal(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   if (!roomSupportModal) return;
+
+  if (roomSupportCloseTimer) {
+    clearTimeout(roomSupportCloseTimer);
+    roomSupportCloseTimer = null;
+  }
+
+  roomSupportModal.style.setProperty('display', 'flex', 'important');
   roomSupportModal.classList.remove('hidden', 'is-hiding');
   roomSupportModal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('modal-open');
-  requestAnimationFrame(() => roomSupportModal.classList.add('is-visible'));
+
+  requestAnimationFrame(() => {
+    roomSupportModal.classList.add('is-visible');
+  });
 }
 
-function closeRoomSupportModal() {
-  if (!roomSupportModal || roomSupportModal.classList.contains('hidden')) return;
+function closeRoomSupportModal(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!roomSupportModal) return;
+
+  if (roomSupportCloseTimer) {
+    clearTimeout(roomSupportCloseTimer);
+    roomSupportCloseTimer = null;
+  }
 
   roomSupportModal.classList.remove('is-visible');
   roomSupportModal.classList.add('is-hiding');
+  roomSupportModal.setAttribute('aria-hidden', 'true');
 
-  setTimeout(() => {
+  roomSupportCloseTimer = setTimeout(() => {
     roomSupportModal.classList.add('hidden');
     roomSupportModal.classList.remove('is-hiding');
-    roomSupportModal.setAttribute('aria-hidden', 'true');
+    roomSupportModal.style.setProperty('display', 'none', 'important');
     document.body.classList.remove('modal-open');
-  }, 220);
+    roomSupportCloseTimer = null;
+  }, 180);
 }
 
 const canControl = () => roomId === 'solo' || isHost;
@@ -1887,13 +1922,29 @@ if (cinemaModeBtn) {
   cinemaModeBtn.addEventListener('click', () => roomPage?.classList.toggle('cinema-mode'));
 }
 
-if (supportRoomBtn) supportRoomBtn.addEventListener('click', openRoomSupportModal);
-roomSupportModalBackdrop?.addEventListener('click', closeRoomSupportModal);
-closeRoomSupportModalBtn?.addEventListener('click', closeRoomSupportModal);
+if (supportRoomBtn) {
+  supportRoomBtn.addEventListener('click', openRoomSupportModal);
+}
+
+if (roomSupportModalBackdrop) {
+  roomSupportModalBackdrop.addEventListener('click', closeRoomSupportModal);
+}
+
+if (closeRoomSupportModalBtn) {
+  closeRoomSupportModalBtn.addEventListener('click', closeRoomSupportModal);
+}
+
+if (roomSupportModal) {
+  roomSupportModal.addEventListener('click', (event) => {
+    if (event.target === roomSupportModal) {
+      closeRoomSupportModal(event);
+    }
+  });
+}
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
-    closeRoomSupportModal();
+    closeRoomSupportModal(event);
   }
 });
 
@@ -1962,6 +2013,11 @@ window.addEventListener('beforeunload', () => {
     activeSearchAbortController.abort();
     activeSearchAbortController = null;
   }
+
+  if (roomSupportCloseTimer) {
+    clearTimeout(roomSupportCloseTimer);
+    roomSupportCloseTimer = null;
+  }
 });
 
 updateControlState();
@@ -1969,113 +2025,3 @@ updateSelectedAnimeInfoContent(null);
 showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
 renderUsers([]);
 startUsersRenderTicker();
-
-/* ===== FIX: надежное закрытие окна поддержки ===== */
-(() => {
-  const modal = document.getElementById('roomSupportModal');
-  const openBtn = document.getElementById('supportRoomBtn');
-  const closeBtn = document.getElementById('closeRoomSupportModalBtn');
-  const backdrop = document.getElementById('roomSupportModalBackdrop');
-
-  if (!modal || !openBtn) return;
-
-  function forceOpenSupportModal(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    modal.classList.remove('hidden', 'is-hiding');
-    modal.classList.add('is-visible');
-    modal.setAttribute('aria-hidden', 'false');
-    modal.style.display = 'flex';
-    document.body.classList.add('modal-open');
-  }
-
-  function forceCloseSupportModal(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-
-    modal.classList.remove('is-visible');
-    modal.classList.add('is-hiding');
-
-    setTimeout(() => {
-      modal.classList.add('hidden');
-      modal.classList.remove('is-hiding');
-      modal.setAttribute('aria-hidden', 'true');
-      modal.style.display = 'none';
-      document.body.classList.remove('modal-open');
-    }, 180);
-  }
-
-  openBtn.addEventListener('click', forceOpenSupportModal, true);
-  closeBtn?.addEventListener('click', forceCloseSupportModal, true);
-  backdrop?.addEventListener('click', forceCloseSupportModal, true);
-
-  modal.addEventListener('click', (event) => {
-    if (event.target === modal) {
-      forceCloseSupportModal(event);
-    }
-  }, true);
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
-      forceCloseSupportModal(event);
-    }
-  }, true);
-})();
-
-/* ===== ЖЁСТКИЙ FIX: закрытие окна поддержки ===== */
-(() => {
-  const modal = document.getElementById('roomSupportModal');
-
-  function hardCloseSupportModal(event) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    }
-
-    if (!modal) return;
-
-    modal.classList.add('hidden');
-    modal.classList.remove('is-visible', 'is-hiding');
-    modal.setAttribute('aria-hidden', 'true');
-    modal.style.setProperty('display', 'none', 'important');
-    document.body.classList.remove('modal-open');
-  }
-
-  function hardOpenSupportModal(event) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    }
-
-    if (!modal) return;
-
-    modal.style.removeProperty('display');
-    modal.classList.remove('hidden', 'is-hiding');
-    modal.classList.add('is-visible');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('modal-open');
-  }
-
-  document.addEventListener('click', (event) => {
-    if (event.target.closest('#supportRoomBtn')) {
-      hardOpenSupportModal(event);
-      return;
-    }
-
-    if (
-      event.target.closest('#closeRoomSupportModalBtn') ||
-      event.target.closest('#roomSupportModalBackdrop')
-    ) {
-      hardCloseSupportModal(event);
-    }
-  }, true);
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      hardCloseSupportModal(event);
-    }
-  }, true);
-})();
