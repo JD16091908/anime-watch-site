@@ -28,19 +28,36 @@ function normalize(value) {
     .trim();
 }
 
-function isHunterQuery(q) {
-  const n = normalize(q);
+function isHunterFranchiseIntent(query) {
+  const n = normalize(query);
+
   return (
-    n.includes('hunter') ||
-    n.includes('хантер') ||
-    n.includes('охотник')
+    n === 'охотник' ||
+    n === 'охотник охотник' ||
+    n.includes('охотник x охотник') ||
+    n.includes('hunter x hunter') ||
+    n.includes('hunter hunter') ||
+    n.includes('хантер')
+  );
+}
+
+function isHunterFranchiseTitle(value) {
+  const title = normalize(value);
+
+  return (
+    title.includes('hunter x hunter') ||
+    title.includes('hunter hunter') ||
+    title.includes('охотник x охотник') ||
+    title.includes('охотник охотник') ||
+    title.includes('хантер x хантер') ||
+    title.includes('хантер хантер')
   );
 }
 
 function getSearchQueries(query) {
   const n = normalize(query);
 
-  if (isHunterQuery(n)) {
+  if (isHunterFranchiseIntent(n)) {
     return HUNTER_QUERIES;
   }
 
@@ -134,15 +151,15 @@ function getScore(item, query) {
   let score = 0;
 
   if (title === q) score += 10000;
-  if (title.includes(q)) score += 5000;
+  if (q.length >= 2 && title.includes(q)) score += 5000;
 
-  if (isHunterQuery(q)) {
-    const hunterTitle =
-      title.includes('hunter') ||
-      title.includes('охотник') ||
-      title.includes('хантер');
+  if (isHunterFranchiseIntent(q)) {
+    if (!isHunterFranchiseTitle(title)) {
+      return -100000;
+    }
 
-    if (hunterTitle) score += 12000;
+    score += 25000;
+
     if (isSerial(item)) score += 8000;
 
     if (
@@ -156,8 +173,8 @@ function getScore(item, query) {
       score -= 9000;
     }
 
-    if (String(yearOf(item)) === '2011') score += 5000;
-    if (String(yearOf(item)) === '1999') score += 2500;
+    if (String(yearOf(item)) === '1999') score += 5000;
+    if (String(yearOf(item)) === '2011') score += 4500;
   }
 
   if (posterOf(item)) score += 100;
@@ -195,8 +212,8 @@ function mapSearchItem(item, query) {
     kodikId,
     materialId: materialIdOf(item),
     score,
-    matchPriority: -score,
-    releaseTs: numericYear ? -numericYear : 0
+    matchPriority: numericYear || 9999,
+    releaseTs: numericYear || 9999
   };
 }
 
@@ -252,7 +269,15 @@ async function searchAnime(query) {
     .filter(item => item.score > 0);
 
   const result = dedupe(mapped)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      const yearA = Number(a.year) || 9999;
+      const yearB = Number(b.year) || 9999;
+
+      if (yearA !== yearB) return yearA - yearB;
+      if (b.score !== a.score) return b.score - a.score;
+
+      return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
+    })
     .slice(0, 80);
 
   searchCache.set(cacheKey, {
@@ -423,7 +448,14 @@ async function animeBySelection(selected = {}) {
       item,
       score: getScore(item, selected.title || titleOf(item))
     }))
-    .sort((a, b) => b.score - a.score)
+    .filter(x => x.score > -100000)
+    .sort((a, b) => {
+      const yearA = Number(yearOf(a.item)) || 9999;
+      const yearB = Number(yearOf(b.item)) || 9999;
+
+      if (yearA !== yearB) return yearA - yearB;
+      return b.score - a.score;
+    })
     .map(x => x.item);
 
   const first = sorted[0];
