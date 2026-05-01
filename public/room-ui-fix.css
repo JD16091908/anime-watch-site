@@ -34,6 +34,13 @@
   min-height: 260px;
 }
 
+/* Оставляем только нативные селекторы Kodik внутри плеера, чтобы не было дубля справа и слева */
+#playerTopOverlay {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Верхние кнопки: Пригласить / Кино / Поддержать */
 .room-page #copyLinkBtn,
 .room-page #cinemaModeBtn,

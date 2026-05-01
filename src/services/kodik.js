@@ -21,7 +21,8 @@ function normalize(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/ё/g, 'е')
-    .replace(/[×х]/g, ' x ')
+    .replace(/[×✕]/g, ' x ')
+    .replace(/(^|[^\p{L}\p{N}])([xх])(?=$|[^\p{L}\p{N}])/giu, '$1 x')
     .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -43,10 +44,7 @@ function getSearchQueries(query) {
     return HUNTER_QUERIES;
   }
 
-  return [
-    query,
-    n
-  ].filter(Boolean);
+  return [query, n].filter(Boolean);
 }
 
 async function kodikGet(endpoint, params = {}) {
@@ -172,6 +170,9 @@ function mapSearchItem(item, query) {
   const shikimoriId = shikimoriIdOf(item);
   const kodikId = item?.id || null;
   const animeId = shikimoriId ? `shikimori:${shikimoriId}` : `kodik:${kodikId || 'unknown'}`;
+  const score = getScore(item, query);
+  const year = yearOf(item);
+  const numericYear = Number(year) || 0;
 
   return {
     animeId,
@@ -185,7 +186,7 @@ function mapSearchItem(item, query) {
       item?.material_data?.anime_title,
       item?.material_data?.full_title
     ].filter(Boolean),
-    year: yearOf(item),
+    year,
     description: item?.material_data?.description || item?.description || '',
     poster: posterOf(item),
     status: item?.material_data?.anime_status || item?.status || '',
@@ -193,7 +194,9 @@ function mapSearchItem(item, query) {
     shikimoriId,
     kodikId,
     materialId: materialIdOf(item),
-    score: getScore(item, query)
+    score,
+    matchPriority: -score,
+    releaseTs: numericYear ? -numericYear : 0
   };
 }
 
@@ -201,10 +204,9 @@ function dedupe(items) {
   const map = new Map();
 
   for (const item of items) {
-    const key =
-      item.shikimoriId
-        ? `shiki:${item.shikimoriId}`
-        : `${normalize(item.title)}:${item.year}:${item.type}`;
+    const key = item.shikimoriId
+      ? `shiki:${item.shikimoriId}`
+      : `${normalize(item.title)}:${item.year}:${item.type}`;
 
     const old = map.get(key);
 
@@ -329,6 +331,30 @@ function mergeEpisodes(items) {
   });
 }
 
+function filterByExactSelection(raw, selected = {}) {
+  let candidates = [...raw];
+
+  if (selected.shikimoriId) {
+    const wanted = String(selected.shikimoriId);
+    const filtered = candidates.filter(item => String(shikimoriIdOf(item) || '') === wanted);
+    if (filtered.length) candidates = filtered;
+  }
+
+  if (selected.kodikId) {
+    const wanted = String(selected.kodikId);
+    const filtered = candidates.filter(item => String(item?.id || '') === wanted);
+    if (filtered.length) candidates = filtered;
+  }
+
+  if (selected.materialId) {
+    const wanted = String(selected.materialId);
+    const filtered = candidates.filter(item => String(materialIdOf(item) || '') === wanted);
+    if (filtered.length) candidates = filtered;
+  }
+
+  return candidates;
+}
+
 async function animeBySelection(selected = {}) {
   const requests = [];
 
@@ -390,7 +416,9 @@ async function animeBySelection(selected = {}) {
 
   if (!raw.length) return null;
 
-  const sorted = raw
+  const candidates = filterByExactSelection(raw, selected);
+
+  const sorted = candidates
     .map(item => ({
       item,
       score: getScore(item, selected.title || titleOf(item))
