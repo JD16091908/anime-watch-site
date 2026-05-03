@@ -3,5 +3,6 @@ Allow: /
 
 Disallow: /api/
 Disallow: /room/
+Disallow: /room.html
 
 Sitemap: https://anivmeste.ru/sitemap.xml
