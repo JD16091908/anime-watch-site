@@ -21,6 +21,7 @@
   <meta name="description" content="Anivmeste — бесплатный сервис для совместного и одиночного просмотра аниме. Создавай комнату, приглашай друзей и смотри вместе." />
   <meta name="robots" content="index,follow" />
   <meta name="theme-color" content="#11192E" />
+
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -30,6 +31,7 @@
     "description": "Бесплатный сервис для совместного и одиночного просмотра аниме. Создавай комнату, приглашай друзей по ссылке и смотри аниме синхронно."
   }
   </script>
+
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://anivmeste.ru/" />
   <meta property="og:site_name" content="Anivmeste" />
@@ -63,7 +65,11 @@
 
     @media (max-width: 768px) {
       .main-page {
-        padding-bottom: 130px !important;
+        padding-bottom: 86px !important;
+      }
+
+      .floating-menu {
+        grid-template-columns: 1fr !important;
       }
     }
   </style>
@@ -84,6 +90,7 @@
           <div class="main-card-badge brand-badge">
             <span class="brand-chip">Совместный просмотр аниме</span>
           </div>
+
           <div class="main-hero-copy">
             <h1 id="homeMainTitle" class="main-title">Смотри аниме вместе</h1>
             <p class="main-subtitle">
@@ -125,6 +132,7 @@
 
         <section class="home-info-grid reveal reveal-4" aria-labelledby="homeFeaturesTitle">
           <h2 id="homeFeaturesTitle" class="hidden">Возможности сервиса</h2>
+
           <article class="home-info-card">
             <div class="home-info-card-inner">
               <div class="home-info-icon" aria-hidden="true">👥</div>
@@ -134,6 +142,7 @@
               </div>
             </div>
           </article>
+
           <article class="home-info-card">
             <div class="home-info-card-inner">
               <div class="home-info-icon" aria-hidden="true">🔗</div>
@@ -143,6 +152,7 @@
               </div>
             </div>
           </article>
+
           <article class="home-info-card">
             <div class="home-info-card-inner">
               <div class="home-info-icon" aria-hidden="true">🎬</div>
@@ -158,28 +168,28 @@
   </div>
 
   <nav class="floating-menu" aria-label="Меню сайта" style="z-index: 10;">
-    <button id="aboutServiceBtn" class="about-service-btn" type="button" aria-haspopup="dialog" aria-controls="aboutModal">
+    <button
+      id="aboutServiceBtn"
+      class="about-service-btn"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="aboutModal"
+    >
       <span class="about-service-icon" aria-hidden="true">i</span>
       <span>О сервисе</span>
     </button>
-    <button id="supportProjectBtn" class="about-service-btn support-service-btn" type="button" aria-haspopup="dialog" aria-controls="supportModal">
-      <span class="about-service-icon support-service-icon" aria-hidden="true">♥</span>
-      <span>Поддержать проект</span>
-    </button>
-    <a href="/support" class="about-service-btn thanks-service-btn">
-      <span class="about-service-icon thanks-service-icon" aria-hidden="true">✦</span>
-      <span>Спасибо за поддержку</span>
-    </a>
   </nav>
 
   <div id="aboutModal" class="about-modal hidden" aria-hidden="true" style="z-index: 1000;">
     <div class="about-modal-backdrop" id="aboutModalBackdrop"></div>
+
     <div class="about-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
       <div class="about-modal-header">
         <div class="about-modal-brand">
           <img src="/logo.svg" alt="Anivmeste" class="about-modal-logo" />
         </div>
       </div>
+
       <div class="about-modal-content">
         <section class="about-modal-section">
           <h2 id="aboutModalTitle">О сервисе</h2>
@@ -188,12 +198,14 @@
             Он помогает быстро создать комнату, пригласить друзей по ссылке и смотреть выбранный тайтл вместе.
           </div>
         </section>
+
         <section class="about-modal-section">
           <h2>Как работает сервис</h2>
           <div class="about-modal-card">
             Сервис использует только общедоступные источники и не хранит собственные копии видеоконтента.
           </div>
         </section>
+
         <section class="about-modal-section">
           <h2>Важно</h2>
           <div class="about-modal-card">
@@ -201,6 +213,7 @@
             Если вы являетесь правообладателем, свяжитесь с нами.
           </div>
         </section>
+
         <section class="about-modal-section">
           <h2>Обратная связь</h2>
           <div class="about-modal-card about-contacts">
@@ -208,6 +221,7 @@
           </div>
         </section>
       </div>
+
       <div class="about-modal-actions">
         <button id="closeAboutModalBtn" class="about-modal-close-btn" type="button">OK</button>
       </div>
@@ -216,21 +230,31 @@
 
   <div id="supportModal" class="about-modal hidden" aria-hidden="true" style="z-index: 1000;">
     <div class="about-modal-backdrop" id="supportModalBackdrop"></div>
+
     <div class="about-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="supportModalTitle">
       <div class="about-modal-header">
         <div class="about-modal-brand">
           <img src="/logo.svg" alt="Anivmeste" class="about-modal-logo" />
         </div>
       </div>
+
       <div class="about-modal-content">
         <section class="about-modal-section">
           <h2 id="supportModalTitle">Поддержка проекта</h2>
           <div class="about-modal-card" id="supportModalDescription"></div>
         </section>
+
         <section class="about-modal-section">
           <h2>Способы поддержки</h2>
+
           <div class="support-grid">
-            <a class="support-card support-card-boosty" id="supportBoostyLink" href="#" target="_blank" rel="noopener noreferrer nofollow">
+            <a
+              class="support-card support-card-boosty"
+              id="supportBoostyLink"
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+            >
               <div class="support-card-head">
                 <div class="support-card-icon">B</div>
                 <div class="support-card-title-wrap">
@@ -240,7 +264,13 @@
               </div>
               <div class="support-card-action">Открыть Boosty</div>
             </a>
-            <a class="support-card support-card-da" href="https://www.donationalerts.com/r/anivmeste" target="_blank" rel="noopener noreferrer">
+
+            <a
+              class="support-card support-card-da"
+              href="https://www.donationalerts.com/r/anivmeste"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <div class="support-card-head">
                 <div class="support-card-icon">₽</div>
                 <div class="support-card-title-wrap">
@@ -252,11 +282,13 @@
             </a>
           </div>
         </section>
+
         <section class="about-modal-section">
           <h2>Спасибо</h2>
           <div class="about-modal-card" id="supportModalThanks"></div>
         </section>
       </div>
+
       <div class="about-modal-actions">
         <a href="/support" class="about-modal-link-btn">Подробнее</a>
         <button id="closeSupportModalBtn" class="about-modal-close-btn" type="button">OK</button>
