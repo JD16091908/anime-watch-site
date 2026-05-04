@@ -140,6 +140,54 @@
   transform: translateY(0);
 }
 
+/* Модалка поддержки: открывается только по кнопке, плавно появляется и нормально закрывается */
+#roomSupportModal {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease;
+}
+
+#roomSupportModal.hidden {
+  display: none !important;
+}
+
+#roomSupportModal.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#roomSupportModal.is-hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#roomSupportModalBackdrop {
+  opacity: 0;
+  transition: opacity 0.24s ease;
+}
+
+#roomSupportModal.is-visible #roomSupportModalBackdrop {
+  opacity: 1;
+}
+
+#roomSupportModal > div:last-child {
+  transform: translateY(18px) scale(0.96);
+  opacity: 0;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease;
+}
+
+#roomSupportModal.is-visible > div:last-child {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+#roomSupportModal.is-hiding > div:last-child {
+  transform: translateY(12px) scale(0.97);
+  opacity: 0;
+}
+
 /* На мобилке зрители не должны съедать экран */
 @media (max-width: 1200px) {
   .right-sidebar > .block:nth-of-type(3) .users-list {
