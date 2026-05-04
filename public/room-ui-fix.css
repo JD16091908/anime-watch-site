@@ -1,37 +1,116 @@
-/* UI fix: зрители сверху, чат ниже, красивые спокойные кнопки */
+/* UI fix: поиск во всю ширину, зрители справа ниже, чат на уровне плеера */
 
-.right-sidebar {
+/* Общая сетка комнаты */
+.room-layout-centered {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-areas:
+    "search search"
+    "selected users"
+    "player chat"
+    "ad nickname";
   gap: 12px;
+  align-items: start;
 }
 
-.right-sidebar > .chat-block {
-  order: 2;
+/* Делаем внутренние блоки player-area отдельными grid-элементами */
+.player-area-centered {
+  display: contents;
+}
+
+.center-search-panel {
+  grid-area: search;
+}
+
+.selected-anime-panel {
+  grid-area: selected;
+}
+
+.player-shell {
+  grid-area: player;
+}
+
+.room-ad-shell {
+  grid-area: ad;
+}
+
+/* Делаем блоки правой панели отдельными grid-элементами */
+.right-sidebar {
+  display: contents;
+}
+
+.users-block {
+  grid-area: users;
+}
+
+.chat-block {
+  grid-area: chat;
+}
+
+.nickname-block {
+  grid-area: nickname;
+}
+
+/* Общий вид правых блоков после display: contents */
+.users-block,
+.chat-block,
+.nickname-block {
+  min-width: 0;
   margin-bottom: 0;
+  padding: 14px;
+  border-radius: var(--room-radius-xl);
+  background:
+    linear-gradient(180deg, rgba(28, 39, 66, 0.95) 0%, rgba(19, 30, 53, 0.97) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: var(--room-shadow-soft);
+  backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
 }
 
-.right-sidebar > .block:nth-of-type(2) {
-  order: 3;
-  margin-bottom: 0;
+.users-block::before,
+.chat-block::before,
+.nickname-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(123, 180, 255, 0.08), transparent 24%),
+    radial-gradient(circle at 100% 18%, rgba(255, 132, 168, 0.055), transparent 24%);
+  pointer-events: none;
 }
 
-.right-sidebar > .block:nth-of-type(3) {
-  order: 1;
-  margin-bottom: 0;
+.users-block > *,
+.chat-block > *,
+.nickname-block > * {
+  position: relative;
+  z-index: 1;
 }
 
-.right-sidebar > .block:nth-of-type(3) .users-list {
+/* Зрители компактно сверху справа */
+.users-block .users-list {
   max-height: 185px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
+/* Чат начинается на уровне плеера */
 .chat-block {
-  min-height: 0;
-  flex: 1;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-messages {
-  min-height: 260px;
+  flex: 1;
+  min-height: 360px;
+  max-height: none;
+}
+
+/* Ник под чатом */
+.nickname-panel {
+  margin-bottom: 0;
 }
 
 /* Оставляем только нативные селекторы Kodik внутри плеера */
@@ -189,14 +268,37 @@
   transform: translateY(16px) scale(0.96);
 }
 
-/* На мобилке зрители не должны съедать экран */
+/* Планшеты и мобилки */
 @media (max-width: 1200px) {
-  .right-sidebar > .block:nth-of-type(3) .users-list {
+  .room-layout-centered {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "search"
+      "selected"
+      "player"
+      "users"
+      "chat"
+      "nickname"
+      "ad";
+  }
+
+  .right-sidebar {
+    display: contents;
+  }
+
+  .users-block .users-list {
     max-height: 240px;
   }
 
   .chat-block {
     min-height: 420px;
+  }
+
+  .chat-messages {
+    min-height: 320px;
+    height: 320px;
+    max-height: 320px;
   }
 }
 
@@ -209,8 +311,18 @@
     min-height: 44px;
   }
 
-  .right-sidebar > .block:nth-of-type(3) .users-list {
+  .users-block .users-list {
     max-height: 210px;
+  }
+
+  .chat-block {
+    min-height: 360px;
+  }
+
+  .chat-messages {
+    min-height: 260px;
+    height: 260px;
+    max-height: 260px;
   }
 
   #roomSupportModal > div:last-child {
