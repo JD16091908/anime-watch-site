@@ -25,15 +25,6 @@ const USER_TIME_STALE_MS = 15000;
 const RESYNC_AFTER_IFRAME_MS = 1200;
 const REQUEST_SYNC_INTERVAL = 7000;
 
-function updateRoomDocumentMeta(currentRoomId) {
-  const title = currentRoomId === 'solo' ? 'Одиночный просмотр' : 'Комната просмотра';
-  document.title = `${title} — Anivmeste`;
-  const roomTitleEl = document.getElementById('roomTitle');
-  if (roomTitleEl) roomTitleEl.textContent = title;
-}
-
-updateRoomDocumentMeta(roomId);
-
 const USER_KEY_STORAGE = 'anivmeste_user_key';
 const USERNAME_STORAGE = 'username';
 const MANUAL_USERNAME_STORAGE = 'saved_username_manual';
@@ -64,6 +55,88 @@ const RANDOM_NICK_NOUNS = [
   'Wanderer', 'Sage', 'Monk', 'Brawler', 'Sniper', 'Scout', 'Captain', 'King', 'Queen', 'Prince',
   'Princess', 'Beast', 'Slayer', 'Seeker', 'Walker', 'Chaser', 'Nomad', 'Reaper', 'Sentinel', 'Alchemist'
 ];
+
+const clientSearchCache = new Map();
+
+let username = resolveInitialUsername();
+let isHost = false;
+let selectedAnime = null;
+let selectedPlayer = null;
+let selectedSeason = null;
+let latestSearchToken = 0;
+let pendingPlaybackApply = null;
+let userInteractedWithPlayer = false;
+let hostTimeBroadcastTimer = null;
+let userTimeBroadcastTimer = null;
+let driftCheckTimer = null;
+let requestSyncTimer = null;
+let hasShownHostMessage = false;
+let lastKnownHostTime = null;
+let lastKnownHostTimeAt = 0;
+let lastAppliedTargetTime = null;
+let lastAppliedAt = 0;
+let lastForcedSyncAt = 0;
+let hasShownFirstEpisodeHint = false;
+let audioContext = null;
+let latestRoomUsers = [];
+let usersRenderTicker = null;
+let showAllSearchResults = false;
+let lastSearchResults = [];
+let lastSearchQueryNormalized = '';
+let activeSearchAbortController = null;
+let lastRenderedSearchSignature = '';
+let lastUserTimeEmitAtClient = 0;
+let currentLoadedEmbedUrl = null;
+let roomSupportCloseTimer = null;
+
+const userKey = getOrCreateUserKey();
+
+let currentState = {
+  animeId: null,
+  animeUrl: null,
+  episodeNumber: null,
+  embedUrl: null,
+  title: null,
+  duration: 0,
+  playback: {
+    paused: true,
+    currentTime: null,
+    updatedAt: 0
+  }
+};
+
+const hostBadge = document.getElementById('hostBadge');
+const usersList = document.getElementById('usersList');
+const animeList = document.getElementById('animeList');
+const searchInput = document.getElementById('searchInput');
+const copyLinkBtn = document.getElementById('copyLinkBtn');
+const cinemaModeBtn = document.getElementById('cinemaModeBtn');
+const supportRoomBtn = document.getElementById('supportRoomBtn');
+const roomPage = document.getElementById('roomPage');
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const sendBtn = document.getElementById('sendBtn');
+const searchStatus = document.getElementById('searchStatus');
+const selectedAnimeInfo = document.getElementById('selectedAnimeInfo');
+const hostSearchHint = document.getElementById('hostSearchHint');
+const nicknameInput = document.getElementById('nicknameInput');
+const saveNicknameBtn = document.getElementById('saveNicknameBtn');
+
+const roomSupportModal = document.getElementById('roomSupportModal');
+const roomSupportModalBackdrop = document.getElementById('roomSupportModalBackdrop');
+const closeRoomSupportModalBtn = document.getElementById('closeRoomSupportModalBtn');
+const roomSupportDescription = document.getElementById('roomSupportDescription');
+const roomSupportThanks = document.getElementById('roomSupportThanks');
+const roomSupportBoostyLink = document.getElementById('roomSupportBoostyLink');
+const roomSupportDonationAlertsLink = document.getElementById('roomSupportDonationAlertsLink');
+
+function updateRoomDocumentMeta(currentRoomId) {
+  const title = currentRoomId === 'solo' ? 'Одиночный просмотр' : 'Комната просмотра';
+  document.title = `${title} — Anivmeste`;
+
+  const roomTitleEl = document.getElementById('roomTitle');
+  if (roomTitleEl) roomTitleEl.textContent = title;
+}
 
 function safeLocalStorageGet(key) {
   try {
@@ -127,8 +200,6 @@ function resolveInitialUsername() {
   return randomUsername;
 }
 
-let username = resolveInitialUsername();
-
 function getOrCreateUserKey() {
   let key = safeLocalStorageGet(USER_KEY_STORAGE);
 
@@ -140,110 +211,12 @@ function getOrCreateUserKey() {
   return key;
 }
 
-const userKey = getOrCreateUserKey();
-
-let isHost = false;
-let selectedAnime = null;
-let selectedPlayer = null;
-let selectedSeason = null;
-let latestSearchToken = 0;
-let pendingPlaybackApply = null;
-let userInteractedWithPlayer = false;
-let hostTimeBroadcastTimer = null;
-let userTimeBroadcastTimer = null;
-let driftCheckTimer = null;
-let requestSyncTimer = null;
-let hasShownHostMessage = false;
-let lastKnownHostTime = null;
-let lastKnownHostTimeAt = 0;
-let lastAppliedTargetTime = null;
-let lastAppliedAt = 0;
-let lastForcedSyncAt = 0;
-let hasShownFirstEpisodeHint = false;
-let audioContext = null;
-let latestRoomUsers = [];
-let usersRenderTicker = null;
-let showAllSearchResults = false;
-let lastSearchResults = [];
-let lastSearchQueryNormalized = '';
-let activeSearchAbortController = null;
-let lastRenderedSearchSignature = '';
-let lastUserTimeEmitAtClient = 0;
-let currentLoadedEmbedUrl = null;
-let roomSupportCloseTimer = null;
-
-const clientSearchCache = new Map();
-
-let currentState = {
-  animeId: null,
-  animeUrl: null,
-  episodeNumber: null,
-  embedUrl: null,
-  title: null,
-  duration: 0,
-  playback: {
-    paused: true,
-    currentTime: null,
-    updatedAt: 0
-  }
-};
-
-const hostBadge = document.getElementById('hostBadge');
-const usersList = document.getElementById('usersList');
-const animeList = document.getElementById('animeList');
-const searchInput = document.getElementById('searchInput');
-const copyLinkBtn = document.getElementById('copyLinkBtn');
-const cinemaModeBtn = document.getElementById('cinemaModeBtn');
-const supportRoomBtn = document.getElementById('supportRoomBtn');
-const roomPage = document.getElementById('roomPage');
-const chatMessages = document.getElementById('chatMessages');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-const searchStatus = document.getElementById('searchStatus');
-const selectedAnimeInfo = document.getElementById('selectedAnimeInfo');
-const hostSearchHint = document.getElementById('hostSearchHint');
-const nicknameInput = document.getElementById('nicknameInput');
-const saveNicknameBtn = document.getElementById('saveNicknameBtn');
-
-const roomSupportModal = document.getElementById('roomSupportModal');
-const roomSupportModalBackdrop = document.getElementById('roomSupportModalBackdrop');
-const closeRoomSupportModalBtn = document.getElementById('closeRoomSupportModalBtn');
-const roomSupportDescription = document.getElementById('roomSupportDescription');
-const roomSupportThanks = document.getElementById('roomSupportThanks');
-const roomSupportBoostyLink = document.getElementById('roomSupportBoostyLink');
-const roomSupportDonationAlertsLink = document.getElementById('roomSupportDonationAlertsLink');
-
-if (nicknameInput) nicknameInput.value = username;
-if (roomSupportDescription) roomSupportDescription.textContent = SUPPORT_CONFIG.description || '';
-if (roomSupportThanks) roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText || '';
-if (roomSupportBoostyLink) roomSupportBoostyLink.href = BOOSTY_URL;
-if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
-
-if (roomSupportModal) {
-  roomSupportModal.classList.add('hidden');
-  roomSupportModal.classList.remove('is-visible', 'is-hiding');
-  roomSupportModal.setAttribute('aria-hidden', 'true');
-  roomSupportModal.style.setProperty('display', 'none', 'important');
-}
-
-if (!window.AnivmesteDebounce) {
-  window.AnivmesteDebounce = function debounce(fn, wait = 300) {
-    let t = null;
-
-    const wrapped = (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), wait);
-    };
-
-    wrapped.cancel = () => clearTimeout(t);
-    return wrapped;
-  };
-}
-
 function ensureAudioContext() {
   if (audioContext) return audioContext;
+
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) return null;
+
   audioContext = new AudioCtx();
   return audioContext;
 }
@@ -350,10 +323,12 @@ function closeRoomSupportModal(event) {
     roomSupportModal.style.setProperty('display', 'none', 'important');
     document.body.classList.remove('modal-open');
     roomSupportCloseTimer = null;
-  }, 180);
+  }, 240);
 }
 
-const canControl = () => roomId === 'solo' || isHost;
+function canControl() {
+  return roomId === 'solo' || isHost;
+}
 
 function getMoscowTimeString() {
   return new Intl.DateTimeFormat('ru-RU', {
@@ -366,6 +341,7 @@ function getMoscowTimeString() {
 
 function sys(text) {
   if (!text) return;
+
   if (chatMessages && window.ChatModule) {
     window.ChatModule.appendSystemMessage(chatMessages, text);
   }
@@ -402,7 +378,11 @@ async function fetchJsonFallback(endpoints, options = {}) {
     try {
       const response = await fetch(endpoint, options);
       const data = await readJsonSafely(response);
-      if (!response.ok) throw new Error(data?.code || data?.error || `HTTP ${response.status}`);
+
+      if (!response.ok) {
+        throw new Error(data?.code || data?.error || `HTTP ${response.status}`);
+      }
+
       return data;
     } catch (error) {
       lastError = error;
@@ -433,6 +413,7 @@ function getEffectivePlaybackTime(playback = currentState.playback) {
 
   const updatedAt = Number(safe.updatedAt || Date.now()) || Date.now();
   const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
+
   return base + elapsed;
 }
 
@@ -470,20 +451,31 @@ function getUniquePlayers(videos) {
     if (!iframeUrl) continue;
 
     const name = getPlayerName(video);
-    if (!map.has(name)) map.set(name, { name, episodeNumbers: new Set() });
+    if (!map.has(name)) {
+      map.set(name, {
+        name,
+        episodeNumbers: new Set()
+      });
+    }
 
     const epNum = getEpisodeNumber(video);
     if (epNum > 0) map.get(name).episodeNumbers.add(epNum);
   }
 
   return [...map.values()]
-    .map(p => ({ name: p.name, count: p.episodeNumbers.size || 1 }))
-    .sort((a, b) => b.count !== a.count ? b.count - a.count : a.name.localeCompare(b.name, 'ru'));
+    .map((player) => ({
+      name: player.name,
+      count: player.episodeNumbers.size || 1
+    }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.name.localeCompare(b.name, 'ru');
+    });
 }
 
 function getVideosBySelectedPlayer(videos) {
   if (!selectedPlayer) return [];
-  return (videos || []).filter(v => getPlayerName(v) === selectedPlayer && !!getIframeUrl(v));
+  return (videos || []).filter((video) => getPlayerName(video) === selectedPlayer && !!getIframeUrl(video));
 }
 
 function getUniqueSeasons(videos) {
@@ -491,8 +483,15 @@ function getUniqueSeasons(videos) {
 
   for (const video of videos || []) {
     const season = getSeasonNumber(video);
-    if (!map.has(season)) map.set(season, { season, count: 1 });
-    else map.get(season).count += 1;
+
+    if (!map.has(season)) {
+      map.set(season, {
+        season,
+        count: 1
+      });
+    } else {
+      map.get(season).count += 1;
+    }
   }
 
   return [...map.values()].sort((a, b) => a.season - b.season);
@@ -500,7 +499,7 @@ function getUniqueSeasons(videos) {
 
 function getVideosBySelectedSeason(videos) {
   if (!selectedSeason) return [];
-  return (videos || []).filter(v => getSeasonNumber(v) === selectedSeason);
+  return (videos || []).filter((video) => getSeasonNumber(video) === selectedSeason);
 }
 
 function getUniqueEpisodes(videos) {
@@ -522,15 +521,20 @@ function findDefaultContext(videos) {
   if (!players.length) return null;
 
   const player = players[0].name;
-  const byPlayer = (videos || []).filter(v => getPlayerName(v) === player && !!getIframeUrl(v));
+  const byPlayer = (videos || []).filter((video) => getPlayerName(video) === player && !!getIframeUrl(video));
   const seasons = getUniqueSeasons(byPlayer);
   const season = seasons[0]?.season || 1;
-  const bySeason = byPlayer.filter(v => getSeasonNumber(v) === season);
+  const bySeason = byPlayer.filter((video) => getSeasonNumber(video) === season);
   const episodes = getUniqueEpisodes(bySeason);
   const episode = episodes[0] || null;
 
   if (!episode) return null;
-  return { player, season, episode };
+
+  return {
+    player,
+    season,
+    episode
+  };
 }
 
 function getInterpolatedHostTime() {
@@ -649,19 +653,21 @@ function checkDrift() {
 
 function startDriftCheck() {
   stopDriftCheck();
+
   if (roomId === 'solo' || isHost) return;
   driftCheckTimer = setInterval(checkDrift, SYNC_DRIFT_INTERVAL);
 }
 
 function stopDriftCheck() {
-  if (driftCheckTimer) {
-    clearInterval(driftCheckTimer);
-    driftCheckTimer = null;
-  }
+  if (!driftCheckTimer) return;
+
+  clearInterval(driftCheckTimer);
+  driftCheckTimer = null;
 }
 
 function startRequestSyncTimer() {
   stopRequestSyncTimer();
+
   if (roomId === 'solo') return;
 
   requestSyncTimer = setInterval(() => {
@@ -672,10 +678,10 @@ function startRequestSyncTimer() {
 }
 
 function stopRequestSyncTimer() {
-  if (requestSyncTimer) {
-    clearInterval(requestSyncTimer);
-    requestSyncTimer = null;
-  }
+  if (!requestSyncTimer) return;
+
+  clearInterval(requestSyncTimer);
+  requestSyncTimer = null;
 }
 
 function updateLocalPlaybackTimeFromPlayer() {
@@ -695,6 +701,7 @@ function emitCurrentUserTime({ force = false } = {}) {
   if (roomId === 'solo' || !currentState.embedUrl) return;
 
   const now = Date.now();
+
   if (!force && now - lastUserTimeEmitAtClient < 450) return;
   lastUserTimeEmitAtClient = now;
 
@@ -711,6 +718,7 @@ function emitCurrentUserTime({ force = false } = {}) {
 
 function startHostTimers() {
   stopHostTimers();
+
   if (!isHost || roomId === 'solo') return;
 
   hostTimeBroadcastTimer = setInterval(() => {
@@ -731,14 +739,15 @@ function startHostTimers() {
 }
 
 function stopHostTimers() {
-  if (hostTimeBroadcastTimer) {
-    clearInterval(hostTimeBroadcastTimer);
-    hostTimeBroadcastTimer = null;
-  }
+  if (!hostTimeBroadcastTimer) return;
+
+  clearInterval(hostTimeBroadcastTimer);
+  hostTimeBroadcastTimer = null;
 }
 
 function startUserTimeTimer() {
   stopUserTimeTimer();
+
   if (roomId === 'solo') return;
 
   emitCurrentUserTime({ force: true });
@@ -749,81 +758,11 @@ function startUserTimeTimer() {
 }
 
 function stopUserTimeTimer() {
-  if (userTimeBroadcastTimer) {
-    clearInterval(userTimeBroadcastTimer);
-    userTimeBroadcastTimer = null;
-  }
+  if (!userTimeBroadcastTimer) return;
+
+  clearInterval(userTimeBroadcastTimer);
+  userTimeBroadcastTimer = null;
 }
-
-window.addEventListener('player:time-update', (e) => {
-  const seconds = e.detail?.time;
-  if (typeof seconds !== 'number' || Number.isNaN(seconds) || seconds < 0) return;
-
-  currentState.playback.currentTime = seconds;
-  currentState.playback.updatedAt = Date.now();
-
-  if (isHost) {
-    lastKnownHostTime = seconds;
-    lastKnownHostTimeAt = Date.now();
-  }
-
-  emitCurrentUserTime();
-});
-
-window.addEventListener('player:duration-update', (e) => {
-  const d = e.detail?.duration;
-  if (typeof d === 'number' && d > 0) currentState.duration = d;
-});
-
-window.addEventListener('player:play', () => {
-  const ct = updateLocalPlaybackTimeFromPlayer();
-
-  currentState.playback.paused = false;
-  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
-  currentState.playback.updatedAt = Date.now();
-
-  emitCurrentUserTime({ force: true });
-
-  if (!isHost || roomId === 'solo') return;
-
-  socket.emit('player-control', {
-    roomId,
-    action: 'play',
-    currentTime: currentState.playback.currentTime
-  });
-});
-
-window.addEventListener('player:pause', () => {
-  const ct = updateLocalPlaybackTimeFromPlayer();
-
-  currentState.playback.paused = true;
-  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
-  currentState.playback.updatedAt = Date.now();
-
-  emitCurrentUserTime({ force: true });
-
-  if (!isHost || roomId === 'solo') return;
-
-  socket.emit('player-control', {
-    roomId,
-    action: 'pause',
-    currentTime: currentState.playback.currentTime
-  });
-});
-
-window.addEventListener('player:local-play', () => {
-  currentState.playback.paused = false;
-  currentState.playback.updatedAt = Date.now();
-  emitCurrentUserTime({ force: true });
-});
-
-window.addEventListener('player:local-pause', () => {
-  const ct = updateLocalPlaybackTimeFromPlayer();
-  currentState.playback.paused = true;
-  currentState.playback.currentTime = typeof ct === 'number' ? ct : currentState.playback.currentTime;
-  currentState.playback.updatedAt = Date.now();
-  emitCurrentUserTime({ force: true });
-});
 
 function updateControlState() {
   const disabled = !canControl();
@@ -845,8 +784,8 @@ function updateControlState() {
     hostBadge.textContent = canControl() ? '👑 Хост' : '👀 Зритель';
   }
 
-  animeList?.querySelectorAll('button').forEach(btn => {
-    btn.disabled = disabled;
+  animeList?.querySelectorAll('button').forEach((button) => {
+    button.disabled = disabled;
   });
 }
 
@@ -888,8 +827,12 @@ function updateSelectedAnimeInfoContent(anime = null) {
 function showPlaceholderUi(title = 'Ничего не выбрано', description = 'Выберите аниме') {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper || !window.PlayerModule) return;
+
   currentLoadedEmbedUrl = null;
-  window.PlayerModule.showPlaceholder(playerWrapper, { title, description });
+  window.PlayerModule.showPlaceholder(playerWrapper, {
+    title,
+    description
+  });
 }
 
 function showBlockedAnimeMessage(message = 'Данное аниме запрещено на территории вашей страны') {
@@ -903,7 +846,11 @@ function showBlockedAnimeMessage(message = 'Данное аниме запрещ
     embedUrl: null,
     title: null,
     duration: 0,
-    playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
+    playback: {
+      paused: true,
+      currentTime: 0,
+      updatedAt: Date.now()
+    }
   };
 
   updateSelectedAnimeInfoContent(null);
@@ -928,14 +875,21 @@ function hideViewerHintOverlay() {
 
 function showFirstEpisodeHintForHost() {
   if (!isHost || roomId === 'solo' || hasShownFirstEpisodeHint) return;
+
   hasShownFirstEpisodeHint = true;
   sys('После загрузки первой серии при необходимости кликните по плееру один раз и нажмите play.');
 }
 
-let bridge = { playerType: 'unknown', iframeWindow: null };
+let bridge = {
+  playerType: 'unknown',
+  iframeWindow: null
+};
 
 function resetBridge() {
-  bridge = { playerType: 'unknown', iframeWindow: null };
+  bridge = {
+    playerType: 'unknown',
+    iframeWindow: null
+  };
 }
 
 function loadIframe(embedUrl) {
@@ -1017,7 +971,11 @@ function launchEpisode(episode, anime) {
     embedUrl,
     title,
     duration: 0,
-    playback: { paused: true, currentTime: 0, updatedAt: Date.now() }
+    playback: {
+      paused: true,
+      currentTime: 0,
+      updatedAt: Date.now()
+    }
   };
 
   selectedSeason = season;
@@ -1043,13 +1001,13 @@ function launchEpisode(episode, anime) {
 }
 
 function extractTbIndex(title) {
-  const t = String(title || '');
-  const m = t.match(/\[(?:tb|тв|tv)[- ]?(\d+)\]/i) || t.match(/\b(?:tb|тв|tv)[- ]?(\d+)\b/i);
+  const value = String(title || '');
+  const match = value.match(/\[(?:tb|тв|tv)[- ]?(\d+)\]/i) || value.match(/\b(?:tb|тв|tv)[- ]?(\d+)\b/i);
 
-  if (!m) return null;
+  if (!match) return null;
 
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : null;
+  const number = Number(match[1]);
+  return Number.isFinite(number) ? number : null;
 }
 
 function getComparableYear(item) {
@@ -1067,7 +1025,7 @@ function getTitleMatchWeight(item, query) {
   if (title.includes(q)) return 2;
 
   const words = q.split(' ').filter(Boolean);
-  if (words.length && words.every(word => title.includes(word))) return 3;
+  if (words.length && words.every((word) => title.includes(word))) return 3;
 
   return 4;
 }
@@ -1104,7 +1062,7 @@ function sortSearchResults(items, query = '') {
 
 function buildSearchSignature(items, expanded) {
   const ids = (items || [])
-    .map(item => `${item.animeId || ''}:${item.title || ''}:${item.year || ''}:${Number(item.score) || 0}`)
+    .map((item) => `${item.animeId || ''}:${item.title || ''}:${item.year || ''}:${Number(item.score) || 0}`)
     .join('|');
 
   return `${expanded ? '1' : '0'}::${ids}`;
@@ -1145,7 +1103,10 @@ function getClientCachedSearch(query) {
 
 function setClientCachedSearch(query, data) {
   pruneClientSearchCache();
-  clientSearchCache.set(query, { createdAt: Date.now(), data });
+  clientSearchCache.set(query, {
+    createdAt: Date.now(),
+    data
+  });
 }
 
 function clearSearchResultsUi() {
@@ -1175,14 +1136,16 @@ function renderAnimeResults(items) {
 
   if (lastRenderedSearchSignature === nextSignature && animeList.innerHTML.trim()) {
     animeList.classList.add('visible');
-    animeList.querySelectorAll('button').forEach(btn => {
-      btn.disabled = !canControl();
+
+    animeList.querySelectorAll('button').forEach((button) => {
+      button.disabled = !canControl();
     });
+
     return;
   }
 
   animeList.innerHTML = `
-    ${visibleItems.map(item => `
+    ${visibleItems.map((item) => `
       <button
         type="button"
         class="search-result-item ${item.animeId === selectedAnime?.animeId ? 'active' : ''}"
@@ -1207,11 +1170,11 @@ function renderAnimeResults(items) {
   animeList.classList.add('visible');
   lastRenderedSearchSignature = nextSignature;
 
-  animeList.querySelectorAll('.search-result-item').forEach(btn => {
-    btn.disabled = !canControl();
+  animeList.querySelectorAll('.search-result-item').forEach((button) => {
+    button.disabled = !canControl();
 
-    btn.addEventListener('click', async () => {
-      const selectedItemFromResults = items.find(item => item.animeId === btn.dataset.animeId);
+    button.addEventListener('click', async () => {
+      const selectedItemFromResults = items.find((item) => item.animeId === button.dataset.animeId);
       if (!selectedItemFromResults) return;
 
       hideSearchResultsUi();
@@ -1244,7 +1207,6 @@ function renderAnimeResults(items) {
 
 async function fetchSearchResults(rawQuery, token) {
   const normalizedQuery = normalizeSearchQuery(rawQuery);
-
   const cached = getClientCachedSearch(normalizedQuery);
 
   if (cached) {
@@ -1265,11 +1227,13 @@ async function fetchSearchResults(rawQuery, token) {
   activeSearchAbortController = new AbortController();
 
   const queryString = `q=${encodeURIComponent(rawQuery)}`;
-  const endpoints = SEARCH_ENDPOINTS.map(base => `${base}?${queryString}`);
+  const endpoints = SEARCH_ENDPOINTS.map((base) => `${base}?${queryString}`);
 
   const data = await fetchJsonFallback(endpoints, {
     signal: activeSearchAbortController.signal,
-    headers: { Accept: 'application/json' }
+    headers: {
+      Accept: 'application/json'
+    }
   });
 
   if (token !== latestSearchToken) return;
@@ -1338,6 +1302,20 @@ function reopenSearchDropdownFromInput() {
   triggerSearchNow(rawQuery);
 }
 
+if (!window.AnivmesteDebounce) {
+  window.AnivmesteDebounce = function debounce(fn, wait = 300) {
+    let timer = null;
+
+    const wrapped = (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+
+    wrapped.cancel = () => clearTimeout(timer);
+    return wrapped;
+  };
+}
+
 const debouncedSearchAnime = window.AnivmesteDebounce(async (query) => {
   const rawQuery = String(query || '').trim();
   const normalizedQuery = normalizeSearchQuery(rawQuery);
@@ -1385,7 +1363,10 @@ async function selectAnime(item) {
   try {
     const data = await fetchJsonFallback(SELECT_ENDPOINTS, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
       body: JSON.stringify({
         animeUrl: item.animeUrl,
         animeId: item.animeId,
@@ -1444,7 +1425,10 @@ function saveNickname() {
   if (nicknameInput) nicknameInput.value = username;
 
   if (roomId !== 'solo') {
-    socket.emit('change-username', { roomId, username });
+    socket.emit('change-username', {
+      roomId,
+      username
+    });
   } else if (oldUsername !== username) {
     sys(`Теперь вы ${username}`);
   }
@@ -1453,7 +1437,6 @@ function saveNickname() {
 function getDisplayedUserTime(user) {
   const safeCurrentTime = Number(user?.currentTime);
   const hasTime = Number.isFinite(safeCurrentTime) && safeCurrentTime >= 0;
-
   const baseTime = hasTime ? safeCurrentTime : 0;
   const paused = !!user?.playbackPaused;
   const updatedAt = Number(user?.timeUpdatedAt || 0);
@@ -1468,7 +1451,7 @@ function renderUsers(users) {
   if (!usersList) return;
 
   if (Array.isArray(users)) {
-    latestRoomUsers = users.map(user => ({ ...user }));
+    latestRoomUsers = users.map((user) => ({ ...user }));
   }
 
   if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
@@ -1476,7 +1459,7 @@ function renderUsers(users) {
     return;
   }
 
-  usersList.innerHTML = latestRoomUsers.map(user => {
+  usersList.innerHTML = latestRoomUsers.map((user) => {
     const displayTime = getDisplayedUserTime(user);
     const timeText = formatWatchTime(displayTime);
     const lastUpdateAt = Number(user?.timeUpdatedAt || 0);
@@ -1505,343 +1488,501 @@ function startUsersRenderTicker() {
   usersRenderTicker = setInterval(() => renderUsers(), 1000);
 }
 
-socket.on('connect', () => {
-  if (roomId !== 'solo') {
-    socket.emit('join-room', { roomId, username, userKey });
-    startRequestSyncTimer();
-  } else {
-    isHost = true;
-    if (window.PlayerModule) window.PlayerModule.setHostState(true);
-    updateControlState();
-    updateSelectedAnimeInfoContent(selectedAnime);
-    showPlaceholderUi(currentState.title || 'Ничего не выбрано', 'Выберите аниме');
-  }
-});
+function initializeRoomSupportModal() {
+  if (roomSupportDescription) roomSupportDescription.textContent = SUPPORT_CONFIG.description || '';
+  if (roomSupportThanks) roomSupportThanks.textContent = SUPPORT_CONFIG.thanksText || '';
+  if (roomSupportBoostyLink) roomSupportBoostyLink.href = BOOSTY_URL;
+  if (roomSupportDonationAlertsLink) roomSupportDonationAlertsLink.href = DONATIONALERTS_URL;
 
-socket.on('join-error', ({ message }) => {
-  alert(message || 'Не удалось войти в комнату');
-  window.location.href = '/';
-});
+  if (!roomSupportModal) return;
 
-socket.on('disconnect', () => {
-  stopHostTimers();
-  stopUserTimeTimer();
-  stopDriftCheck();
-  stopRequestSyncTimer();
-});
+  roomSupportModal.classList.add('hidden');
+  roomSupportModal.classList.remove('is-visible', 'is-hiding');
+  roomSupportModal.setAttribute('aria-hidden', 'true');
+  roomSupportModal.style.setProperty('display', 'none', 'important');
+}
 
-socket.on('you-are-host', () => {
-  isHost = true;
+function bindPlayerEvents() {
+  window.addEventListener('player:time-update', (event) => {
+    const seconds = event.detail?.time;
+    if (typeof seconds !== 'number' || Number.isNaN(seconds) || seconds < 0) return;
 
-  if (window.PlayerModule) window.PlayerModule.setHostState(true);
+    currentState.playback.currentTime = seconds;
+    currentState.playback.updatedAt = Date.now();
 
-  updateControlState();
-  stopDriftCheck();
+    if (isHost) {
+      lastKnownHostTime = seconds;
+      lastKnownHostTimeAt = Date.now();
+    }
 
-  if (currentState.embedUrl) startHostTimers();
+    emitCurrentUserTime();
+  });
 
-  if (!hasShownHostMessage) {
-    sys('Вы хост комнаты');
-    hasShownHostMessage = true;
-  }
-});
+  window.addEventListener('player:duration-update', (event) => {
+    const duration = event.detail?.duration;
+    if (typeof duration === 'number' && duration > 0) {
+      currentState.duration = duration;
+    }
+  });
 
-socket.on('sync-state', (state) => {
-  const nextEmbedUrl = state.embedUrl ?? null;
+  window.addEventListener('player:play', () => {
+    const currentTime = updateLocalPlaybackTimeFromPlayer();
 
-  isHost = !!state.isHost;
+    currentState.playback.paused = false;
+    currentState.playback.currentTime = typeof currentTime === 'number' ? currentTime : currentState.playback.currentTime;
+    currentState.playback.updatedAt = Date.now();
 
-  if (window.PlayerModule) window.PlayerModule.setHostState(isHost);
+    emitCurrentUserTime({ force: true });
 
-  updateControlState();
+    if (!isHost || roomId === 'solo') return;
 
-  const playback = normalizePlaybackFromServer(state.playback) || {
-    paused: true,
-    currentTime: 0,
-    updatedAt: 0
-  };
+    socket.emit('player-control', {
+      roomId,
+      action: 'play',
+      currentTime: currentState.playback.currentTime
+    });
+  });
 
-  currentState = {
-    animeId: state.animeId ?? null,
-    animeUrl: state.animeUrl ?? null,
-    episodeNumber: state.episodeNumber ?? null,
-    embedUrl: nextEmbedUrl,
-    title: state.title ?? null,
-    duration: currentState.duration || 0,
-    playback
-  };
+  window.addEventListener('player:pause', () => {
+    const currentTime = updateLocalPlaybackTimeFromPlayer();
 
-  if (typeof playback.currentTime === 'number') {
-    lastKnownHostTime = playback.currentTime;
-    lastKnownHostTimeAt = Date.now();
-  }
+    currentState.playback.paused = true;
+    currentState.playback.currentTime = typeof currentTime === 'number' ? currentTime : currentState.playback.currentTime;
+    currentState.playback.updatedAt = Date.now();
 
-  if (nextEmbedUrl) {
-    if (currentLoadedEmbedUrl !== nextEmbedUrl) {
-      loadIframe(nextEmbedUrl);
+    emitCurrentUserTime({ force: true });
 
-      pendingPlaybackApply = playback;
-      setTimeout(() => {
-        if (pendingPlaybackApply) {
-          const pb = pendingPlaybackApply;
-          pendingPlaybackApply = null;
-          applyPlaybackState(pb, { force: true, reason: 'sync-state' });
-        }
-      }, 900);
+    if (!isHost || roomId === 'solo') return;
+
+    socket.emit('player-control', {
+      roomId,
+      action: 'pause',
+      currentTime: currentState.playback.currentTime
+    });
+  });
+
+  window.addEventListener('player:local-play', () => {
+    currentState.playback.paused = false;
+    currentState.playback.updatedAt = Date.now();
+    emitCurrentUserTime({ force: true });
+  });
+
+  window.addEventListener('player:local-pause', () => {
+    const currentTime = updateLocalPlaybackTimeFromPlayer();
+
+    currentState.playback.paused = true;
+    currentState.playback.currentTime = typeof currentTime === 'number' ? currentTime : currentState.playback.currentTime;
+    currentState.playback.updatedAt = Date.now();
+
+    emitCurrentUserTime({ force: true });
+  });
+}
+
+function bindSocketEvents() {
+  socket.on('connect', () => {
+    if (roomId !== 'solo') {
+      socket.emit('join-room', {
+        roomId,
+        username,
+        userKey
+      });
+
+      startRequestSyncTimer();
     } else {
-      if (!isHost) {
-        applyPlaybackState(playback, { force: false, reason: 'sync-state-same-video' });
-        startDriftCheck();
-      } else {
-        startHostTimers();
+      isHost = true;
+
+      if (window.PlayerModule) {
+        window.PlayerModule.setHostState(true);
       }
 
-      startUserTimeTimer();
+      updateControlState();
+      updateSelectedAnimeInfoContent(selectedAnime);
+      showPlaceholderUi(currentState.title || 'Ничего не выбрано', 'Выберите аниме');
     }
-  } else {
-    pendingPlaybackApply = null;
-    currentLoadedEmbedUrl = null;
-    showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
-  }
-});
+  });
 
-socket.on('video-changed', (state) => {
-  const nextEmbedUrl = state.embedUrl ?? null;
+  socket.on('join-error', ({ message }) => {
+    alert(message || 'Не удалось войти в комнату');
+    window.location.href = '/';
+  });
 
-  const playback = normalizePlaybackFromServer(state.playback) || {
-    paused: true,
-    currentTime: 0,
-    updatedAt: Date.now()
-  };
+  socket.on('disconnect', () => {
+    stopHostTimers();
+    stopUserTimeTimer();
+    stopDriftCheck();
+    stopRequestSyncTimer();
+  });
 
-  currentState = {
-    animeId: state.animeId ?? null,
-    animeUrl: state.animeUrl ?? null,
-    episodeNumber: state.episodeNumber ?? null,
-    embedUrl: nextEmbedUrl,
-    title: state.title ?? null,
-    duration: 0,
-    playback
-  };
+  socket.on('you-are-host', () => {
+    isHost = true;
 
-  if (nextEmbedUrl) {
-    if (currentLoadedEmbedUrl !== nextEmbedUrl) {
-      loadIframe(nextEmbedUrl);
-      pendingPlaybackApply = playback;
+    if (window.PlayerModule) {
+      window.PlayerModule.setHostState(true);
+    }
+
+    updateControlState();
+    stopDriftCheck();
+
+    if (currentState.embedUrl) {
+      startHostTimers();
+    }
+
+    if (!hasShownHostMessage) {
+      sys('Вы хост комнаты');
+      hasShownHostMessage = true;
+    }
+  });
+
+  socket.on('sync-state', (state) => {
+    const nextEmbedUrl = state.embedUrl ?? null;
+
+    isHost = !!state.isHost;
+
+    if (window.PlayerModule) {
+      window.PlayerModule.setHostState(isHost);
+    }
+
+    updateControlState();
+
+    const playback = normalizePlaybackFromServer(state.playback) || {
+      paused: true,
+      currentTime: 0,
+      updatedAt: 0
+    };
+
+    currentState = {
+      animeId: state.animeId ?? null,
+      animeUrl: state.animeUrl ?? null,
+      episodeNumber: state.episodeNumber ?? null,
+      embedUrl: nextEmbedUrl,
+      title: state.title ?? null,
+      duration: currentState.duration || 0,
+      playback
+    };
+
+    if (typeof playback.currentTime === 'number') {
+      lastKnownHostTime = playback.currentTime;
+      lastKnownHostTimeAt = Date.now();
+    }
+
+    if (nextEmbedUrl) {
+      if (currentLoadedEmbedUrl !== nextEmbedUrl) {
+        loadIframe(nextEmbedUrl);
+
+        pendingPlaybackApply = playback;
+
+        setTimeout(() => {
+          if (pendingPlaybackApply) {
+            const pending = pendingPlaybackApply;
+            pendingPlaybackApply = null;
+            applyPlaybackState(pending, {
+              force: true,
+              reason: 'sync-state'
+            });
+          }
+        }, 900);
+      } else {
+        if (!isHost) {
+          applyPlaybackState(playback, {
+            force: false,
+            reason: 'sync-state-same-video'
+          });
+
+          startDriftCheck();
+        } else {
+          startHostTimers();
+        }
+
+        startUserTimeTimer();
+      }
     } else {
       pendingPlaybackApply = null;
+      currentLoadedEmbedUrl = null;
+      showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
+    }
+  });
 
-      if (!isHost) {
-        applyPlaybackState(playback, { force: true, reason: 'video-changed-same-video' });
-        startDriftCheck();
+  socket.on('video-changed', (state) => {
+    const nextEmbedUrl = state.embedUrl ?? null;
+
+    const playback = normalizePlaybackFromServer(state.playback) || {
+      paused: true,
+      currentTime: 0,
+      updatedAt: Date.now()
+    };
+
+    currentState = {
+      animeId: state.animeId ?? null,
+      animeUrl: state.animeUrl ?? null,
+      episodeNumber: state.episodeNumber ?? null,
+      embedUrl: nextEmbedUrl,
+      title: state.title ?? null,
+      duration: 0,
+      playback
+    };
+
+    if (nextEmbedUrl) {
+      if (currentLoadedEmbedUrl !== nextEmbedUrl) {
+        loadIframe(nextEmbedUrl);
+        pendingPlaybackApply = playback;
       } else {
-        startHostTimers();
+        pendingPlaybackApply = null;
+
+        if (!isHost) {
+          applyPlaybackState(playback, {
+            force: true,
+            reason: 'video-changed-same-video'
+          });
+
+          startDriftCheck();
+        } else {
+          startHostTimers();
+        }
+
+        startUserTimeTimer();
       }
-
-      startUserTimeTimer();
+    } else {
+      pendingPlaybackApply = null;
+      currentLoadedEmbedUrl = null;
+      showPlaceholderUi('Ничего не выбрано', 'Хост пока не запустил тайтл');
     }
-  } else {
-    pendingPlaybackApply = null;
-    currentLoadedEmbedUrl = null;
-    showPlaceholderUi('Ничего не выбрано', 'Хост пока не запустил тайтл');
-  }
-});
-
-socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
-  if (roomId === 'solo' || isHost) return;
-
-  const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
-    ? currentTime
-    : currentState.playback.currentTime;
-
-  const newPaused = typeof paused === 'boolean' ? paused : action === 'pause';
-
-  lastKnownHostTime = safeTime ?? 0;
-  lastKnownHostTimeAt = Date.now();
-
-  currentState.playback = {
-    paused: newPaused,
-    currentTime: safeTime ?? 0,
-    updatedAt: Number(updatedAt || Date.now()) || Date.now()
-  };
-
-  if (action === 'timeupdate') {
-    checkDrift();
-    emitCurrentUserTime();
-    return;
-  }
-
-  if (action === 'play' || action === 'pause') {
-    applyPlaybackState(currentState.playback, { force: true, reason: action });
-    lastAppliedAt = Date.now();
-    lastAppliedTargetTime = safeTime;
-    lastForcedSyncAt = Date.now();
-  } else if (action === 'seek') {
-    applyPlaybackState(currentState.playback, { force: true, reason: 'seek' });
-    lastAppliedAt = Date.now();
-    lastAppliedTargetTime = safeTime;
-    lastForcedSyncAt = Date.now();
-  }
-});
-
-socket.on('room-users', renderUsers);
-
-socket.on('system-message', ({ text }) => sys(text));
-
-socket.on('chat-message', ({ username: author, message, time }) => {
-  if (!chatMessages || !window.ChatModule) return;
-
-  const isSelfMessage = author === username;
-
-  window.ChatModule.appendMessage(chatMessages, {
-    username: author,
-    message,
-    time,
-    isSelf: isSelfMessage
   });
 
-  if (!isSelfMessage) playChatSound();
-});
+  socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
+    if (roomId === 'solo' || isHost) return;
 
-window.addEventListener('pointerdown', () => {
-  userInteractedWithPlayer = true;
-  hideViewerHintOverlay();
-  unlockAudioContext();
-});
+    const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
+      ? currentTime
+      : currentState.playback.currentTime;
 
-window.addEventListener('keydown', () => {
-  userInteractedWithPlayer = true;
-  hideViewerHintOverlay();
-  unlockAudioContext();
-});
+    const newPaused = typeof paused === 'boolean' ? paused : action === 'pause';
 
-document.addEventListener('click', (event) => {
-  const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
-  if (!withinSearch) hideSearchResultsUi();
-});
+    lastKnownHostTime = safeTime ?? 0;
+    lastKnownHostTimeAt = Date.now();
 
-if (copyLinkBtn) {
-  copyLinkBtn.addEventListener('click', async () => {
-    const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
+    currentState.playback = {
+      paused: newPaused,
+      currentTime: safeTime ?? 0,
+      updatedAt: Number(updatedAt || Date.now()) || Date.now()
+    };
 
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      sys('Ссылка скопирована');
-    } catch {
-      window.prompt('Скопируйте ссылку:', inviteUrl);
+    if (action === 'timeupdate') {
+      checkDrift();
+      emitCurrentUserTime();
+      return;
     }
+
+    if (action === 'play' || action === 'pause') {
+      applyPlaybackState(currentState.playback, {
+        force: true,
+        reason: action
+      });
+
+      lastAppliedAt = Date.now();
+      lastAppliedTargetTime = safeTime;
+      lastForcedSyncAt = Date.now();
+    } else if (action === 'seek') {
+      applyPlaybackState(currentState.playback, {
+        force: true,
+        reason: 'seek'
+      });
+
+      lastAppliedAt = Date.now();
+      lastAppliedTargetTime = safeTime;
+      lastForcedSyncAt = Date.now();
+    }
+  });
+
+  socket.on('room-users', renderUsers);
+
+  socket.on('system-message', ({ text }) => sys(text));
+
+  socket.on('chat-message', ({ username: author, message, time }) => {
+    if (!chatMessages || !window.ChatModule) return;
+
+    const isSelfMessage = author === username;
+
+    window.ChatModule.appendMessage(chatMessages, {
+      username: author,
+      message,
+      time,
+      isSelf: isSelfMessage
+    });
+
+    if (!isSelfMessage) playChatSound();
   });
 }
 
-if (cinemaModeBtn) {
-  cinemaModeBtn.addEventListener('click', () => roomPage?.classList.toggle('cinema-mode'));
-}
+function bindUiEvents() {
+  window.addEventListener('pointerdown', () => {
+    userInteractedWithPlayer = true;
+    hideViewerHintOverlay();
+    unlockAudioContext();
+  });
 
-if (supportRoomBtn) {
-  supportRoomBtn.addEventListener('click', openRoomSupportModal);
-}
+  window.addEventListener('keydown', () => {
+    userInteractedWithPlayer = true;
+    hideViewerHintOverlay();
+    unlockAudioContext();
+  });
 
-if (roomSupportModalBackdrop) {
-  roomSupportModalBackdrop.addEventListener('click', closeRoomSupportModal);
-}
+  document.addEventListener('click', (event) => {
+    const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
+    if (!withinSearch) hideSearchResultsUi();
+  });
 
-if (closeRoomSupportModalBtn) {
-  closeRoomSupportModalBtn.addEventListener('click', closeRoomSupportModal);
-}
+  if (copyLinkBtn) {
+    copyLinkBtn.addEventListener('click', async () => {
+      const inviteUrl = `${window.location.origin}/room/${encodeURIComponent(roomId)}`;
 
-if (roomSupportModal) {
-  roomSupportModal.addEventListener('click', (event) => {
-    if (event.target === roomSupportModal) {
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+        sys('Ссылка скопирована');
+      } catch {
+        window.prompt('Скопируйте ссылку:', inviteUrl);
+      }
+    });
+  }
+
+  if (cinemaModeBtn) {
+    cinemaModeBtn.addEventListener('click', () => {
+      roomPage?.classList.toggle('cinema-mode');
+    });
+  }
+
+  if (supportRoomBtn) {
+    supportRoomBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openRoomSupportModal(event);
+    });
+  }
+
+  if (roomSupportModalBackdrop) {
+    roomSupportModalBackdrop.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeRoomSupportModal(event);
+    });
+  }
+
+  if (closeRoomSupportModalBtn) {
+    closeRoomSupportModalBtn.addEventListener('click', closeRoomSupportModal);
+  }
+
+  if (roomSupportModal) {
+    roomSupportModal.addEventListener('click', (event) => {
+      if (event.target === roomSupportModal) {
+        closeRoomSupportModal(event);
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
       closeRoomSupportModal(event);
     }
   });
-}
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
-    closeRoomSupportModal(event);
+  if (saveNicknameBtn) {
+    saveNicknameBtn.addEventListener('click', saveNickname);
   }
-});
 
-if (saveNicknameBtn) saveNicknameBtn.addEventListener('click', saveNickname);
+  if (nicknameInput) {
+    nicknameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') saveNickname();
+    });
+  }
 
-if (nicknameInput) {
-  nicknameInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') saveNickname();
-  });
-}
+  if (sendBtn && chatInput) {
+    sendBtn.addEventListener('click', () => {
+      const message = chatInput.value.trim();
+      if (!message) return;
 
-if (sendBtn && chatInput) {
-  sendBtn.addEventListener('click', () => {
-    const message = chatInput.value.trim();
-    if (!message) return;
+      unlockAudioContext();
+      playChatSound();
 
-    unlockAudioContext();
-    playChatSound();
+      if (roomId !== 'solo') {
+        socket.emit('chat-message', {
+          roomId,
+          username,
+          message
+        });
+      } else if (window.ChatModule && chatMessages) {
+        window.ChatModule.appendMessage(chatMessages, {
+          username,
+          message,
+          time: getMoscowTimeString(),
+          isSelf: true
+        });
+      }
 
-    if (roomId !== 'solo') {
-      socket.emit('chat-message', { roomId, username, message });
-    } else if (window.ChatModule && chatMessages) {
-      window.ChatModule.appendMessage(chatMessages, {
-        username,
-        message,
-        time: getMoscowTimeString(),
-        isSelf: true
-      });
+      chatInput.value = '';
+      chatInput.focus();
+    });
+
+    chatInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') sendBtn.click();
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener('input', () => debouncedSearchAnime(searchInput.value));
+    searchInput.addEventListener('click', () => reopenSearchDropdownFromInput());
+    searchInput.addEventListener('focus', () => reopenSearchDropdownFromInput());
+
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        hideSearchResultsUi();
+        searchInput.blur();
+        debouncedSearchAnime.cancel();
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        triggerSearchNow(searchInput.value);
+      }
+    });
+  }
+
+  window.addEventListener('beforeunload', () => {
+    stopHostTimers();
+    stopUserTimeTimer();
+    stopDriftCheck();
+    stopRequestSyncTimer();
+
+    if (usersRenderTicker) {
+      clearInterval(usersRenderTicker);
+      usersRenderTicker = null;
     }
 
-    chatInput.value = '';
-    chatInput.focus();
-  });
-
-  chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendBtn.click();
-  });
-}
-
-if (searchInput) {
-  searchInput.addEventListener('input', () => debouncedSearchAnime(searchInput.value));
-  searchInput.addEventListener('click', () => reopenSearchDropdownFromInput());
-  searchInput.addEventListener('focus', () => reopenSearchDropdownFromInput());
-
-  searchInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      hideSearchResultsUi();
-      searchInput.blur();
-      debouncedSearchAnime.cancel();
+    if (activeSearchAbortController) {
+      activeSearchAbortController.abort();
+      activeSearchAbortController = null;
     }
 
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      triggerSearchNow(searchInput.value);
+    if (roomSupportCloseTimer) {
+      clearTimeout(roomSupportCloseTimer);
+      roomSupportCloseTimer = null;
     }
   });
 }
 
-window.addEventListener('beforeunload', () => {
-  stopHostTimers();
-  stopUserTimeTimer();
-  stopDriftCheck();
-  stopRequestSyncTimer();
+function initRoomPage() {
+  updateRoomDocumentMeta(roomId);
 
-  if (usersRenderTicker) {
-    clearInterval(usersRenderTicker);
-    usersRenderTicker = null;
-  }
+  if (nicknameInput) nicknameInput.value = username;
 
-  if (activeSearchAbortController) {
-    activeSearchAbortController.abort();
-    activeSearchAbortController = null;
-  }
+  initializeRoomSupportModal();
+  bindPlayerEvents();
+  bindSocketEvents();
+  bindUiEvents();
 
-  if (roomSupportCloseTimer) {
-    clearTimeout(roomSupportCloseTimer);
-    roomSupportCloseTimer = null;
-  }
-});
+  updateControlState();
+  updateSelectedAnimeInfoContent(null);
+  showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
+  renderUsers([]);
+  startUsersRenderTicker();
+}
 
-updateControlState();
-updateSelectedAnimeInfoContent(null);
-showPlaceholderUi('Ничего не выбрано', isHost ? 'Выберите аниме' : 'Хост пока не запустил тайтл');
-renderUsers([]);
-startUsersRenderTicker();
+initRoomPage();
