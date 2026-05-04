@@ -34,7 +34,7 @@
   min-height: 260px;
 }
 
-/* Оставляем только нативные селекторы Kodik внутри плеера, чтобы не было дубля справа и слева */
+/* Оставляем только нативные селекторы Kodik внутри плеера */
 #playerTopOverlay {
   display: none !important;
   visibility: hidden !important;
@@ -55,43 +55,43 @@
   color: #f7f9ff;
   border: 1px solid rgba(165, 185, 255, 0.36);
   background:
-    linear-gradient(180deg, rgba(170, 188, 255, 0.23), rgba(102, 122, 210, 0.13)),
-    rgba(255, 255, 255, 0.055);
+    linear-gradient(180deg, rgba(120, 138, 205, 0.18), rgba(55, 70, 125, 0.14)),
+    rgba(10, 15, 28, 0.82);
   box-shadow:
-    0 10px 22px rgba(28, 42, 92, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .room-page #copyLinkBtn:hover,
 .room-page #cinemaModeBtn:hover,
 .room-page #supportRoomBtn:hover {
   transform: translateY(-1px);
-  border-color: rgba(190, 205, 255, 0.54);
+  border-color: rgba(170, 190, 255, 0.45);
   background:
-    linear-gradient(180deg, rgba(185, 201, 255, 0.30), rgba(115, 137, 225, 0.18)),
-    rgba(255, 255, 255, 0.075);
+    linear-gradient(180deg, rgba(130, 150, 220, 0.24), rgba(65, 80, 145, 0.18)),
+    rgba(12, 18, 34, 0.9);
   box-shadow:
-    0 13px 28px rgba(36, 54, 118, 0.34),
-    0 0 22px rgba(143, 164, 255, 0.13),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    0 13px 28px rgba(0, 0, 0, 0.36),
+    0 0 18px rgba(100, 125, 220, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* Поддержать — чуть теплее, но не кислотно */
+/* Поддержать — темнее и аккуратнее */
 .room-page #supportRoomBtn {
-  border-color: rgba(255, 174, 202, 0.38);
+  border-color: rgba(160, 120, 165, 0.34);
   background:
-    linear-gradient(180deg, rgba(255, 155, 188, 0.24), rgba(141, 126, 235, 0.14)),
-    rgba(255, 255, 255, 0.055);
+    linear-gradient(180deg, rgba(145, 95, 135, 0.18), rgba(80, 65, 130, 0.14)),
+    rgba(12, 14, 28, 0.86);
 }
 
 .room-page #supportRoomBtn:hover {
-  border-color: rgba(255, 190, 215, 0.56);
+  border-color: rgba(190, 145, 190, 0.46);
   background:
-    linear-gradient(180deg, rgba(255, 169, 199, 0.30), rgba(151, 138, 245, 0.18)),
-    rgba(255, 255, 255, 0.075);
+    linear-gradient(180deg, rgba(160, 105, 150, 0.24), rgba(90, 75, 145, 0.18)),
+    rgba(15, 18, 34, 0.94);
 }
 
-/* Кнопки Boosty / DonationAlerts — одинаковые, заметные, спокойные */
+/* Кнопки Boosty / DonationAlerts */
 .room-support-link,
 .room-support-link-boosty,
 .room-support-link-da {
@@ -106,13 +106,13 @@
   font-size: 15px;
   font-weight: 900;
   letter-spacing: 0.01em;
-  border: 1px solid rgba(180, 198, 255, 0.38);
+  border: 1px solid rgba(150, 170, 240, 0.32);
   background:
-    linear-gradient(180deg, rgba(165, 184, 255, 0.28), rgba(96, 118, 215, 0.18)),
-    rgba(255, 255, 255, 0.055);
+    linear-gradient(180deg, rgba(120, 140, 215, 0.22), rgba(65, 80, 150, 0.15)),
+    rgba(10, 15, 28, 0.84);
   box-shadow:
-    0 12px 26px rgba(35, 49, 105, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 12px 26px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.11);
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease,
@@ -124,14 +124,14 @@
 .room-support-link-boosty:hover,
 .room-support-link-da:hover {
   transform: translateY(-1px);
-  border-color: rgba(203, 216, 255, 0.56);
+  border-color: rgba(190, 205, 255, 0.48);
   background:
-    linear-gradient(180deg, rgba(182, 198, 255, 0.34), rgba(112, 134, 230, 0.22)),
-    rgba(255, 255, 255, 0.075);
+    linear-gradient(180deg, rgba(140, 160, 235, 0.28), rgba(80, 95, 170, 0.2)),
+    rgba(12, 18, 34, 0.92);
   box-shadow:
-    0 15px 32px rgba(39, 56, 125, 0.38),
-    0 0 24px rgba(143, 164, 255, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    0 15px 32px rgba(0, 0, 0, 0.4),
+    0 0 22px rgba(120, 145, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .room-support-link:active,
@@ -140,11 +140,12 @@
   transform: translateY(0);
 }
 
-/* Модалка поддержки: открывается только по кнопке, плавно появляется и нормально закрывается */
+/* ===== АНИМАЦИЯ МОДАЛКИ ПОДДЕРЖКИ ===== */
+
 #roomSupportModal {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.24s ease;
+  transition: opacity 0.26s ease;
 }
 
 #roomSupportModal.hidden {
@@ -163,7 +164,7 @@
 
 #roomSupportModalBackdrop {
   opacity: 0;
-  transition: opacity 0.24s ease;
+  transition: opacity 0.26s ease;
 }
 
 #roomSupportModal.is-visible #roomSupportModalBackdrop {
@@ -171,21 +172,21 @@
 }
 
 #roomSupportModal > div:last-child {
-  transform: translateY(18px) scale(0.96);
   opacity: 0;
+  transform: translateY(22px) scale(0.94);
   transition:
-    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.22s ease;
+    opacity 0.24s ease,
+    transform 0.32s cubic-bezier(0.2, 0.9, 0.2, 1.15);
 }
 
 #roomSupportModal.is-visible > div:last-child {
-  transform: translateY(0) scale(1);
   opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 #roomSupportModal.is-hiding > div:last-child {
-  transform: translateY(12px) scale(0.97);
   opacity: 0;
+  transform: translateY(16px) scale(0.96);
 }
 
 /* На мобилке зрители не должны съедать экран */
@@ -210,5 +211,9 @@
 
   .right-sidebar > .block:nth-of-type(3) .users-list {
     max-height: 210px;
+  }
+
+  #roomSupportModal > div:last-child {
+    max-width: calc(100vw - 28px);
   }
 }
