@@ -16,9 +16,10 @@ window.PlayerModule = (() => {
   let pollingTimer = null;
 
   function normalizeUrl(url) {
-    if (!url) return '';
-    if (String(url).startsWith('//')) return `https:${url}`;
-    return String(url);
+    const value = String(url || '').trim();
+    if (!value) return '';
+    if (value.startsWith('//')) return `https:${value}`;
+    return value;
   }
 
   function escapeHtml(value) {
@@ -31,27 +32,10 @@ window.PlayerModule = (() => {
   }
 
   function detectPlayerType(url) {
-    const u = String(url || '').toLowerCase();
-    if (!u) return 'unknown';
-    if (u.includes('kodik')) return 'kodik';
+    const value = String(url || '').toLowerCase();
+    if (!value) return 'unknown';
+    if (value.includes('kodik')) return 'kodik';
     return 'unknown';
-  }
-
-  function extractOverlay(container) {
-    if (!container) return null;
-    const overlay = container.querySelector('#playerTopOverlay');
-    if (overlay && overlay.parentNode === container) {
-      overlay.remove();
-      return overlay;
-    }
-    return null;
-  }
-
-  function restoreOverlay(container, overlayEl) {
-    if (!container || !overlayEl) return;
-    if (!container.contains(overlayEl)) {
-      container.appendChild(overlayEl);
-    }
   }
 
   function postMessageToIframe(payload) {
@@ -76,7 +60,7 @@ window.PlayerModule = (() => {
     if (!currentIframe?.contentWindow) return false;
 
     if (!playerReady && !force) {
-      commandQueue = commandQueue.filter(c => c.method !== method);
+      commandQueue = commandQueue.filter((command) => command.method !== method);
       commandQueue.push({ method, params });
       return true;
     }
@@ -115,10 +99,10 @@ window.PlayerModule = (() => {
   }
 
   function stopPolling() {
-    if (pollingTimer) {
-      clearInterval(pollingTimer);
-      pollingTimer = null;
-    }
+    if (!pollingTimer) return;
+
+    clearInterval(pollingTimer);
+    pollingTimer = null;
   }
 
   function flushCommandQueue() {
@@ -166,6 +150,7 @@ window.PlayerModule = (() => {
     if (!normalizedSrc) return null;
 
     const iframe = document.createElement('iframe');
+
     iframe.src = normalizedSrc;
     iframe.title = title;
     iframe.allow = 'autoplay; fullscreen; picture-in-picture';
@@ -199,19 +184,13 @@ window.PlayerModule = (() => {
   function clearPlayer(container) {
     if (!container) return;
 
-    const overlay = extractOverlay(container);
-
     resetState();
     currentIframe = null;
     container.innerHTML = '';
-
-    restoreOverlay(container, overlay);
   }
 
   function mountIframe(container, { src, title } = {}) {
     if (!container) return null;
-
-    const overlay = extractOverlay(container);
 
     resetState();
     currentIframe = null;
@@ -220,21 +199,14 @@ window.PlayerModule = (() => {
     const iframe = createIframe({ src, title });
 
     if (!iframe) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'placeholder';
-      wrapper.innerHTML = `
-        <div class="placeholder-content">
-          <h2>${escapeHtml('Ошибка загрузки')}</h2>
-          <p>${escapeHtml('Не удалось загрузить плеер')}</p>
-        </div>
-      `;
-      container.appendChild(wrapper);
-      restoreOverlay(container, overlay);
+      showPlaceholder(container, {
+        title: 'Ошибка загрузки',
+        description: 'Не удалось загрузить плеер'
+      });
       return null;
     }
 
     container.appendChild(iframe);
-    restoreOverlay(container, overlay);
     return iframe;
   }
 
@@ -243,8 +215,6 @@ window.PlayerModule = (() => {
     description = 'Выберите аниме и серию'
   } = {}) {
     if (!container) return;
-
-    const overlay = extractOverlay(container);
 
     resetState();
     currentIframe = null;
@@ -260,7 +230,6 @@ window.PlayerModule = (() => {
     `;
 
     container.appendChild(wrapper);
-    restoreOverlay(container, overlay);
   }
 
   function play() {
@@ -288,7 +257,7 @@ window.PlayerModule = (() => {
 
   function seek(time) {
     const safeTime = Number(time);
-    if (Number.isNaN(safeTime) || safeTime < 0) return false;
+    if (!Number.isFinite(safeTime) || safeTime < 0) return false;
 
     lastKnownTime = safeTime;
     lastKnownTimeAt = Date.now();
@@ -298,7 +267,10 @@ window.PlayerModule = (() => {
     sendKodikCommand('video.seek', { time: safeTime });
     sendKodikCommand('setCurrentTime', { time: safeTime });
 
-    window.dispatchEvent(new CustomEvent('player:time-update', { detail: { time: safeTime } }));
+    window.dispatchEvent(new CustomEvent('player:time-update', {
+      detail: { time: safeTime }
+    }));
+
     return true;
   }
 
@@ -337,28 +309,30 @@ window.PlayerModule = (() => {
   }
 
   function extractNumberFromPayload(payload, keys = []) {
-    if (typeof payload === 'number') return payload;
-
-    if (typeof payload === 'string') {
-      const n = Number(payload);
-      return Number.isFinite(n) ? n : null;
+    if (typeof payload === 'number') {
+      return Number.isFinite(payload) ? payload : null;
     }
 
-    if (payload && typeof payload === 'object') {
-      for (const key of keys) {
-        const n = Number(payload[key]);
-        if (Number.isFinite(n)) return n;
-      }
+    if (typeof payload === 'string') {
+      const number = Number(payload);
+      return Number.isFinite(number) ? number : null;
+    }
 
-      if (payload.payload && typeof payload.payload === 'object') {
-        const nested = extractNumberFromPayload(payload.payload, keys);
-        if (nested !== null) return nested;
-      }
+    if (!payload || typeof payload !== 'object') return null;
 
-      if (payload.data && typeof payload.data === 'object') {
-        const nested = extractNumberFromPayload(payload.data, keys);
-        if (nested !== null) return nested;
-      }
+    for (const key of keys) {
+      const number = Number(payload[key]);
+      if (Number.isFinite(number)) return number;
+    }
+
+    if (payload.payload && typeof payload.payload === 'object') {
+      const nested = extractNumberFromPayload(payload.payload, keys);
+      if (nested !== null) return nested;
+    }
+
+    if (payload.data && typeof payload.data === 'object') {
+      const nested = extractNumberFromPayload(payload.data, keys);
+      if (nested !== null) return nested;
     }
 
     return null;
