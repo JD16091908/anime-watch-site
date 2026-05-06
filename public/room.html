@@ -138,17 +138,29 @@
       </div>
 
       <div class="chat-block block">
-        <div class="chat-head">
+        <div class="chat-block-header">
           <h2>💬 Чат</h2>
           <button
-            id="roomUsersModalBtn"
-            class="room-users-icon-btn"
+            id="toggleUsersPanelBtn"
+            class="small-btn chat-users-toggle-btn"
             type="button"
-            title="Показать участников комнаты"
-            aria-label="Показать участников комнаты"
+            aria-expanded="false"
+            aria-controls="usersDropdownPanel"
+            title="Показать список участников"
           >
-            👥
+            👥 Участники
           </button>
+        </div>
+
+        <div id="usersDropdownPanel" class="users-dropdown-panel">
+          <div class="users-dropdown-head">
+            <div class="users-dropdown-title">👀 Зрители</div>
+            <div class="users-dropdown-subtitle">Участники комнаты и их прогресс</div>
+          </div>
+
+          <div id="usersList" class="users-list">
+            <div class="empty-state">Пока никого нет</div>
+          </div>
         </div>
 
         <div id="chatMessages" class="chat-messages"></div>
@@ -171,35 +183,6 @@
 
   </div>
 
-</div>
-
-<div
-  id="roomUsersModal"
-  class="room-users-modal hidden"
-  aria-modal="true"
-  aria-hidden="true"
-  role="dialog"
->
-  <div id="roomUsersModalBackdrop" class="room-users-modal-backdrop"></div>
-
-  <aside class="room-users-modal-panel" aria-label="Участники комнаты">
-    <div class="room-users-modal-head">
-      <h2>Участники комнаты</h2>
-      <button
-        id="closeRoomUsersModalBtn"
-        class="room-users-modal-close"
-        type="button"
-        title="Закрыть"
-        aria-label="Закрыть список участников"
-      >
-        ✕
-      </button>
-    </div>
-
-    <div id="usersList" class="room-users-modal-list">
-      <div class="empty-state">Пока никого нет</div>
-    </div>
-  </aside>
 </div>
 
 <div
