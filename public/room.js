@@ -122,6 +122,11 @@ const hostSearchHint = document.getElementById('hostSearchHint');
 const nicknameInput = document.getElementById('nicknameInput');
 const saveNicknameBtn = document.getElementById('saveNicknameBtn');
 
+const roomUsersModalBtn = document.getElementById('roomUsersModalBtn');
+const roomUsersModal = document.getElementById('roomUsersModal');
+const roomUsersModalBackdrop = document.getElementById('roomUsersModalBackdrop');
+const closeRoomUsersModalBtn = document.getElementById('closeRoomUsersModalBtn');
+
 const roomSupportModal = document.getElementById('roomSupportModal');
 const roomSupportModalBackdrop = document.getElementById('roomSupportModalBackdrop');
 const closeRoomSupportModalBtn = document.getElementById('closeRoomSupportModalBtn');
@@ -275,6 +280,55 @@ function playChatSound() {
   } catch (error) {
     console.warn('Не удалось воспроизвести звук чата:', error);
   }
+}
+
+function updateRoomUsersButton() {
+  if (!roomUsersModalBtn) return;
+
+  const totalUsers = Array.isArray(latestRoomUsers) ? latestRoomUsers.length : 0;
+  roomUsersModalBtn.textContent = totalUsers > 0 ? `👥 ${totalUsers}` : '👥';
+  roomUsersModalBtn.title = totalUsers > 0
+    ? `Участники комнаты: ${totalUsers}`
+    : 'Показать участников комнаты';
+}
+
+function openRoomUsersModal(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!roomUsersModal) return;
+
+  roomUsersModal.classList.remove('hidden');
+  roomUsersModal.classList.add('is-visible');
+  roomUsersModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
+  renderUsers();
+}
+
+function closeRoomUsersModal(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!roomUsersModal) return;
+
+  roomUsersModal.classList.remove('is-visible');
+  roomUsersModal.classList.add('hidden');
+  roomUsersModal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('modal-open');
+}
+
+function initializeRoomUsersModal() {
+  updateRoomUsersButton();
+
+  if (!roomUsersModal) return;
+
+  roomUsersModal.classList.add('hidden');
+  roomUsersModal.classList.remove('is-visible');
+  roomUsersModal.setAttribute('aria-hidden', 'true');
 }
 
 function openRoomSupportModal(event) {
@@ -1447,40 +1501,61 @@ function getDisplayedUserTime(user) {
   return baseTime + elapsed;
 }
 
-function renderUsers(users) {
-  if (!usersList) return;
+function renderRoomUserRow(user, options = {}) {
+  const displayTime = getDisplayedUserTime(user);
+  const timeText = formatWatchTime(displayTime);
+  const lastUpdateAt = Number(user?.timeUpdatedAt || 0);
+  const isFresh = lastUpdateAt > 0 && (Date.now() - lastUpdateAt) <= USER_TIME_STALE_MS;
+  const isLive = !user?.playbackPaused && isFresh;
+  const isHostRow = !!options.isHostRow;
 
+  return `
+    <div class="room-user-row ${isHostRow ? 'room-user-row-host' : ''}">
+      <div class="room-user-avatar" aria-hidden="true">${isHostRow ? '👑' : '👤'}</div>
+      <div class="room-user-info">
+        <div class="room-user-name">${escapeHtml(user?.username || 'Гость')}</div>
+        <div class="room-user-status ${isLive ? 'is-live' : 'is-paused'}">
+          ${isLive ? 'Смотрит сейчас' : 'На паузе'} • ${escapeHtml(timeText)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderUsers(users) {
   if (Array.isArray(users)) {
     latestRoomUsers = users.map((user) => ({ ...user }));
   }
+
+  updateRoomUsersButton();
+
+  if (!usersList) return;
 
   if (!Array.isArray(latestRoomUsers) || latestRoomUsers.length === 0) {
     usersList.innerHTML = `<div class="empty-state">Пока никого нет</div>`;
     return;
   }
 
-  usersList.innerHTML = latestRoomUsers.map((user) => {
-    const displayTime = getDisplayedUserTime(user);
-    const timeText = formatWatchTime(displayTime);
-    const lastUpdateAt = Number(user?.timeUpdatedAt || 0);
-    const isFresh = lastUpdateAt > 0 && (Date.now() - lastUpdateAt) <= USER_TIME_STALE_MS;
-    const isLive = !user?.playbackPaused && isFresh;
+  const hostUser = latestRoomUsers.find((user) => user.isHost) || latestRoomUsers[0];
+  const viewerUsers = latestRoomUsers.filter((user) => user !== hostUser);
 
-    return `
-      <div class="user-item">
-        <div class="user-main">
-          <div class="user-identity">
-            <span class="user-name">${escapeHtml(user.username)}</span>
-            ${user.isHost ? `<span class="host-label">Хост</span>` : ''}
-          </div>
-          <div
-            class="user-time ${isLive ? 'is-live' : 'is-paused'}"
-            title="${isLive ? 'Сейчас смотрит' : 'На паузе'}"
-          >${escapeHtml(timeText)}</div>
-        </div>
+  usersList.innerHTML = `
+    <div class="room-users-section">
+      <div class="room-users-section-title">Хост</div>
+      <div class="room-users-section-body">
+        ${renderRoomUserRow(hostUser, { isHostRow: true })}
       </div>
-    `;
-  }).join('');
+    </div>
+
+    <div class="room-users-section">
+      <div class="room-users-section-title">Зрители</div>
+      <div class="room-users-section-body">
+        ${viewerUsers.length
+          ? viewerUsers.map((user) => renderRoomUserRow(user)).join('')
+          : '<div class="room-users-empty-note">Зрителей пока нет</div>'}
+      </div>
+    </div>
+  `;
 }
 
 function startUsersRenderTicker() {
@@ -1596,6 +1671,7 @@ function bindSocketEvents() {
       }
 
       updateControlState();
+      updateRoomUsersButton();
       updateSelectedAnimeInfoContent(selectedAnime);
       showPlaceholderUi(currentState.title || 'Ничего не выбрано', 'Выберите аниме');
     }
@@ -1850,6 +1926,26 @@ function bindUiEvents() {
     });
   }
 
+  if (roomUsersModalBtn) {
+    roomUsersModalBtn.addEventListener('click', openRoomUsersModal);
+  }
+
+  if (roomUsersModalBackdrop) {
+    roomUsersModalBackdrop.addEventListener('click', closeRoomUsersModal);
+  }
+
+  if (closeRoomUsersModalBtn) {
+    closeRoomUsersModalBtn.addEventListener('click', closeRoomUsersModal);
+  }
+
+  if (roomUsersModal) {
+    roomUsersModal.addEventListener('click', (event) => {
+      if (event.target === roomUsersModal) {
+        closeRoomUsersModal(event);
+      }
+    });
+  }
+
   if (supportRoomBtn) {
     supportRoomBtn.addEventListener('click', (event) => {
       event.preventDefault();
@@ -1879,7 +1975,14 @@ function bindUiEvents() {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
+    if (event.key !== 'Escape') return;
+
+    if (roomUsersModal && !roomUsersModal.classList.contains('hidden')) {
+      closeRoomUsersModal(event);
+      return;
+    }
+
+    if (roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
       closeRoomSupportModal(event);
     }
   });
@@ -1974,6 +2077,7 @@ function initRoomPage() {
   if (nicknameInput) nicknameInput.value = username;
 
   initializeRoomSupportModal();
+  initializeRoomUsersModal();
   bindPlayerEvents();
   bindSocketEvents();
   bindUiEvents();
