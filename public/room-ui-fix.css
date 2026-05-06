@@ -1,4 +1,4 @@
-/* UI fix: правая колонка без обрезания, ник компактный, чат ровно с плеером */
+/* UI fix: адаптивный плеер, чат ровно на уровне плеера, правая колонка без обрезания */
 
 /* ===== ГЛОБАЛЬНАЯ ЗАЩИТА ОТ ОБРЕЗАНИЯ ===== */
 
@@ -22,14 +22,14 @@ body {
 
 .room-layout-centered {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 370px;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 21vw, 390px);
   grid-template-areas:
     "search search"
     "selected nickname"
     "player chat"
     "ad chat";
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
   max-width: 100%;
   padding: 10px 16px 14px 12px;
@@ -51,15 +51,27 @@ body {
 
 .center-search-panel {
   grid-area: search;
+  align-self: start;
 }
 
 .selected-anime-panel {
   grid-area: selected;
+  align-self: start;
 }
+
+.room-ad-shell {
+  grid-area: ad;
+  align-self: start;
+}
+
+/* ===== АДАПТИВНЫЙ ПЛЕЕР ===== */
 
 .player-shell {
   grid-area: player;
   align-self: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-top: 0 !important;
 }
 
@@ -67,8 +79,30 @@ body {
   margin-top: 0 !important;
 }
 
-.room-ad-shell {
-  grid-area: ad;
+.player-wrapper {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.player-wrapper iframe {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: 0;
+  display: block;
+}
+
+/* На очень широких экранах не даем плееру становиться нелепо огромным по высоте */
+@media (min-width: 1600px) {
+  .player-wrapper {
+    max-height: calc(100vh - 130px);
+  }
 }
 
 /* ===== ПРАВАЯ КОЛОНКА ===== */
@@ -189,18 +223,20 @@ body {
   white-space: nowrap;
 }
 
-/* ===== ЧАТ ===== */
+/* ===== ЧАТ: СТРОГО НА ОДНОМ УРОВНЕ С ПЛЕЕРОМ ===== */
 
 .chat-block {
   grid-area: chat;
-  align-self: start;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   margin-top: 0 !important;
 }
 
 .chat-block-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -256,6 +292,7 @@ body {
 .users-dropdown-panel {
   width: 100%;
   max-width: 100%;
+  flex: 0 0 auto;
   overflow: hidden;
   max-height: 0;
   opacity: 0;
@@ -492,13 +529,13 @@ body {
 /* ===== ОБЛАСТЬ СООБЩЕНИЙ ===== */
 
 .chat-messages {
-  flex: 1;
+  flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  min-height: 470px;
+  min-height: 0;
+  height: auto;
   max-height: none;
-  height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -570,6 +607,7 @@ body {
 /* ===== НИЖНЯЯ ПАНЕЛЬ ВВОДА ===== */
 
 .chat-input-box {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 108px;
   gap: 8px;
@@ -813,6 +851,7 @@ body {
       "ad";
     gap: 12px;
     padding: 8px;
+    align-items: start;
   }
 
   .nickname-block,
@@ -822,10 +861,16 @@ body {
 
   .chat-block {
     min-height: 420px;
+    height: auto;
   }
 
   .chat-messages {
     min-height: 320px;
+  }
+
+  .player-wrapper {
+    width: 100%;
+    aspect-ratio: 16 / 9;
   }
 }
 
@@ -866,6 +911,7 @@ body {
 
   .chat-block {
     min-height: 360px;
+    height: auto;
   }
 
   .chat-block-header {
