@@ -517,16 +517,10 @@ app.get('/room/:roomId/*', (req, res) => {
   return res.sendFile(path.join(__dirname, '../public/room.html'));
 });
 
-app.get('/anime/:slug', (req, res) => {
-  const slug = String(req.params.slug || '').trim().toLowerCase();
-  const anime = SEO_ANIME_BY_SLUG.get(slug);
-
-  if (!anime) {
-    return res.status(404).sendFile(path.join(__dirname, '../public/index.html'));
-  }
-
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  return res.type('html').send(buildAnimeSeoPage(anime));
+app.get(/^\/anime(?:\/.*)?$/, (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(404).sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 app.get('/', (req, res) => {
