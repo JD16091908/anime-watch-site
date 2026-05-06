@@ -1,4 +1,4 @@
-/* UI fix: поиск во всю ширину, зрители справа ниже, чат на уровне плеера */
+/* UI fix: поиск во всю ширину, ник справа в свободной зоне, чат рядом с плеером */
 
 /* Общая сетка комнаты */
 .room-layout-centered {
@@ -6,10 +6,10 @@
   grid-template-columns: minmax(0, 1fr) 330px;
   grid-template-areas:
     "search search"
-    "selected users"
+    "selected nickname"
     "player chat"
-    "ad nickname";
-  gap: 12px;
+    "ad chat";
+  gap: 14px;
   align-items: start;
 }
 
@@ -39,10 +39,6 @@
   display: contents;
 }
 
-.users-block {
-  grid-area: users;
-}
-
 .chat-block {
   grid-area: chat;
 }
@@ -52,7 +48,6 @@
 }
 
 /* Общий вид правых блоков после display: contents */
-.users-block,
 .chat-block,
 .nickname-block {
   min-width: 0;
@@ -68,7 +63,6 @@
   overflow: hidden;
 }
 
-.users-block::before,
 .chat-block::before,
 .nickname-block::before {
   content: "";
@@ -81,25 +75,79 @@
   pointer-events: none;
 }
 
-.users-block > *,
 .chat-block > *,
 .nickname-block > * {
   position: relative;
   z-index: 1;
 }
 
-/* Зрители компактно сверху справа */
-.users-block .users-list {
-  max-height: 185px;
-  overflow-y: auto;
-  padding-right: 4px;
+/* Блок ника справа в свободном месте */
+.nickname-block {
+  align-self: stretch;
+  min-height: 128px;
 }
 
-/* Чат начинается на уровне плеера */
+.nickname-panel {
+  height: 100%;
+  min-height: 100px;
+  margin-bottom: 0;
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(143, 164, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(39, 53, 84, 0.92), rgba(30, 42, 70, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.nickname-label {
+  margin-bottom: 0;
+  color: #dce7ff;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
+.nickname-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.nickname-input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(38, 50, 80, 0.96), rgba(30, 41, 69, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 7px 18px rgba(0, 0, 0, 0.12);
+}
+
+.nickname-save-btn {
+  min-width: 108px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 14px;
+}
+
+/* Чат начинается на уровне плеера и не прилипает к нику */
 .chat-block {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.chat-block-header {
+  margin-bottom: 12px;
 }
 
 .chat-messages {
@@ -108,9 +156,235 @@
   max-height: none;
 }
 
-/* Ник под чатом */
-.nickname-panel {
+/* Выпадающий список участников */
+.users-dropdown-panel {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
   margin-bottom: 0;
+  padding: 0 12px;
+  pointer-events: none;
+  border-radius: var(--room-radius-lg);
+  background:
+    linear-gradient(180deg, rgba(31, 42, 68, 0.95) 0%, rgba(23, 33, 55, 0.97) 100%);
+  border: 1px solid transparent;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  transition:
+    max-height 0.28s ease,
+    opacity 0.2s ease,
+    margin-bottom 0.2s ease,
+    padding 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.users-dropdown-panel.is-open {
+  max-height: 520px;
+  opacity: 1;
+  margin-bottom: 12px;
+  padding: 12px;
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.users-dropdown-head {
+  margin-bottom: 12px;
+}
+
+.users-dropdown-title {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #f3f7ff;
+  margin-bottom: 4px;
+}
+
+.users-dropdown-subtitle {
+  color: #aebada;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.users-list {
+  list-style: none;
+  padding: 0 4px 0 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 290px;
+  overflow-y: auto;
+}
+
+.user-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--room-radius-lg);
+  background:
+    linear-gradient(180deg, rgba(39, 53, 84, 0.98) 0%, rgba(31, 44, 72, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.user-item.is-host {
+  border-color: rgba(246, 199, 104, 0.32);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    0 0 0 1px rgba(246, 199, 104, 0.08) inset;
+}
+
+.user-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(135deg, rgba(123, 140, 255, 0.95), rgba(255, 132, 168, 0.90));
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.user-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.user-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  word-break: break-word;
+  color: #fff;
+}
+
+.host-label,
+.viewer-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.host-label {
+  background: var(--room-yellow);
+  color: #1b1300;
+}
+
+.viewer-label {
+  background: rgba(143, 164, 255, 0.18);
+  color: #dfe7ff;
+  border: 1px solid rgba(173, 194, 255, 0.18);
+}
+
+.user-time {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 82px;
+  text-align: center;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.105) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: #e7eeff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.user-time.is-live {
+  background: linear-gradient(180deg, rgba(143, 164, 255, 0.26) 0%, rgba(143, 164, 255, 0.14) 100%);
+  border-color: rgba(173, 194, 255, 0.46);
+  box-shadow: 0 0 0 1px rgba(143, 163, 255, 0.18) inset;
+}
+
+.user-time.is-paused {
+  opacity: 0.92;
+}
+
+.user-time.is-live::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: #9fb2ff;
+  box-shadow: 0 0 10px rgba(159, 178, 255, 0.95);
+  vertical-align: middle;
+  animation: user-time-pulse 1.4s ease-in-out infinite;
+}
+
+.user-subline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-watch-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #bfd0f7;
+  font-weight: 600;
+}
+
+.user-watch-state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.user-watch-state.is-live::before {
+  background: #9fb2ff;
+  box-shadow: 0 0 12px rgba(159, 178, 255, 0.85);
+}
+
+.user-watch-state.is-paused::before {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+@keyframes user-time-pulse {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
 }
 
 /* Оставляем только нативные селекторы Kodik внутри плеера */
@@ -276,19 +550,23 @@
     grid-template-areas:
       "search"
       "selected"
-      "player"
-      "users"
-      "chat"
       "nickname"
+      "player"
+      "chat"
       "ad";
+    gap: 12px;
   }
 
   .right-sidebar {
     display: contents;
   }
 
-  .users-block .users-list {
-    max-height: 240px;
+  .nickname-block {
+    min-height: auto;
+  }
+
+  .nickname-panel {
+    min-height: auto;
   }
 
   .chat-block {
@@ -299,6 +577,10 @@
     min-height: 320px;
     height: 320px;
     max-height: 320px;
+  }
+
+  .users-list {
+    max-height: 240px;
   }
 }
 
@@ -311,8 +593,14 @@
     min-height: 44px;
   }
 
-  .users-block .users-list {
-    max-height: 210px;
+  .nickname-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .nickname-save-btn {
+    width: 100%;
   }
 
   .chat-block {
@@ -323,6 +611,10 @@
     min-height: 260px;
     height: 260px;
     max-height: 260px;
+  }
+
+  .users-list {
+    max-height: 210px;
   }
 
   #roomSupportModal > div:last-child {
