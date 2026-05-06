@@ -1,17 +1,21 @@
-/* UI fix: аккуратная компоновка, ник в свободной зоне, чат ровно на уровне плеера */
+/* UI fix: ник в свободной зоне, чат строго на уровне плеера, без обрезания справа */
 
-/* ===== ОСНОВНАЯ СЕТКА ===== */
+/* ===== БАЗОВАЯ ПЕРЕРАЗМЕТКА ===== */
 
 .room-layout-centered {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) 356px;
   grid-template-areas:
     "search search"
     "selected nickname"
     "player chat"
-    "ad .";
+    "ad chat";
   gap: 14px;
   align-items: start;
+}
+
+.room-layout-centered > * {
+  min-width: 0;
 }
 
 .player-area-centered {
@@ -32,44 +36,40 @@
 
 .player-shell {
   grid-area: player;
+  margin-top: 0 !important;
+  align-self: start;
+}
+
+.player-shell-raised {
+  margin-top: 0 !important;
 }
 
 .room-ad-shell {
   grid-area: ad;
 }
 
-.nickname-block {
-  grid-area: nickname;
-}
-
-.chat-block {
-  grid-area: chat;
-}
-
-/* Убираем старое поднятие плеера, из-за которого чат был ниже визуально */
-.player-shell-raised {
-  margin-top: 0 !important;
-}
-
-/* ===== ОБЩИЙ СТИЛЬ КАРТОЧЕК СПРАВА ===== */
+/* ===== ПРАВАЯ КОЛОНКА ===== */
 
 .nickname-block,
 .chat-block {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
-  margin-bottom: 0;
-  padding: 14px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 15px;
   border-radius: 22px;
   background:
     radial-gradient(circle at 10% 0%, rgba(123, 180, 255, 0.10), transparent 28%),
     radial-gradient(circle at 100% 14%, rgba(255, 132, 168, 0.06), transparent 22%),
-    linear-gradient(180deg, rgba(28, 39, 66, 0.96) 0%, rgba(19, 30, 53, 0.98) 100%);
+    linear-gradient(180deg, rgba(28, 39, 66, 0.97) 0%, rgba(19, 30, 53, 0.99) 100%);
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     0 14px 30px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(12px);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .nickname-block::before,
@@ -87,18 +87,31 @@
 .chat-block > * {
   position: relative;
   z-index: 1;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* ===== БЛОК НИКА ===== */
 
 .nickname-block {
-  align-self: start;
+  grid-area: nickname;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
 }
 
 .nickname-panel {
-  margin-bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  margin: 0;
   padding: 16px;
   border-radius: 18px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   background:
     radial-gradient(circle at 12% 0%, rgba(143, 164, 255, 0.12), transparent 34%),
     linear-gradient(180deg, rgba(43, 58, 94, 0.96), rgba(31, 44, 73, 0.96));
@@ -110,7 +123,7 @@
 
 .nickname-label {
   display: block;
-  margin-bottom: 10px;
+  margin: 0 0 10px;
   color: #e5ecff;
   font-size: 14px;
   font-weight: 800;
@@ -118,16 +131,21 @@
 }
 
 .nickname-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .nickname-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   height: 44px;
   padding: 0 14px;
+  box-sizing: border-box;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -142,19 +160,25 @@
 }
 
 .nickname-save-btn {
-  min-width: 112px;
+  min-width: 116px;
+  max-width: 100%;
   height: 44px;
   min-height: 44px;
+  padding: 0 16px;
   border-radius: 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 /* ===== ЧАТ ===== */
 
 .chat-block {
+  grid-area: chat;
+  align-self: start;
   display: flex;
   flex-direction: column;
-  align-self: start;
   min-height: 100%;
+  margin-top: 0 !important;
 }
 
 .chat-block-header {
@@ -162,13 +186,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .chat-block-header h2 {
   margin: 0;
+  min-width: 0;
   font-size: 17px;
   font-weight: 850;
   letter-spacing: -0.01em;
@@ -177,6 +202,7 @@
 
 .chat-users-toggle-btn {
   min-width: auto;
+  max-width: 100%;
   height: 36px;
   padding: 0 14px;
   border-radius: 999px;
@@ -191,6 +217,7 @@
   box-shadow:
     0 8px 18px rgba(0, 0, 0, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
 }
 
 .chat-users-toggle-btn::after {
@@ -205,9 +232,12 @@
   transform: rotate(180deg);
 }
 
-/* ===== ВЫПАДАЮЩИЙ СПИСОК УЧАСТНИКОВ ===== */
+/* ===== ВЫПАДАЮЩИЙ БЛОК УЧАСТНИКОВ ===== */
 
 .users-dropdown-panel {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   overflow: hidden;
   max-height: 0;
   opacity: 0;
@@ -256,6 +286,9 @@
 
 .users-list {
   list-style: none;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 0 4px 0 0;
   margin: 0;
   display: flex;
@@ -265,12 +298,13 @@
   overflow-y: auto;
 }
 
-/* ===== ЭЛЕМЕНТЫ УЧАСТНИКОВ ===== */
-
 .user-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 12px;
   border-radius: 16px;
   background:
@@ -439,19 +473,24 @@
   }
 }
 
-/* ===== СООБЩЕНИЯ ЧАТА ===== */
+/* ===== ЧАТОВЫЕ СООБЩЕНИЯ ===== */
 
 .chat-messages {
   flex: 1;
-  min-height: 430px;
-  max-height: 430px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 470px;
+  max-height: none;
+  height: 100%;
+  box-sizing: border-box;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  margin-bottom: 12px;
+  margin: 0 0 12px;
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(18, 26, 46, 0.88), rgba(20, 31, 56, 0.92));
@@ -463,6 +502,9 @@
 
 .chat-message,
 .system-message {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 12px 14px;
   border-radius: 14px;
   line-height: 1.45;
@@ -511,21 +553,27 @@
   font-size: 14px;
 }
 
-/* ===== НИЖНЯЯ ПАНЕЛЬ ЧАТА ===== */
+/* ===== НИЖНЯЯ ПАНЕЛЬ ВВОДА ===== */
 
 .chat-input-box {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
 }
 
 .chat-input-box input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
   height: 46px;
   padding: 0 14px;
+  box-sizing: border-box;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background:
@@ -544,9 +592,13 @@
 }
 
 #sendBtn {
-  min-width: 96px;
+  min-width: 100px;
+  max-width: 100%;
   height: 46px;
+  padding: 0 16px;
   border-radius: 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 /* ===== ПРЯЧЕМ ЛИШНИЙ OVERLAY ПЛЕЕРА ===== */
@@ -708,6 +760,12 @@
 
 /* ===== АДАПТИВ ===== */
 
+@media (max-width: 1400px) {
+  .room-layout-centered {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
 @media (max-width: 1200px) {
   .room-layout-centered {
     grid-template-columns: 1fr;
@@ -721,8 +779,9 @@
     gap: 12px;
   }
 
-  .right-sidebar {
-    display: contents;
+  .nickname-block,
+  .chat-block {
+    align-self: start;
   }
 
   .nickname-block {
@@ -735,11 +794,6 @@
 
   .chat-messages {
     min-height: 320px;
-    max-height: 320px;
-  }
-
-  .users-list {
-    max-height: 240px;
   }
 }
 
@@ -754,10 +808,11 @@
 
   .nickname-panel {
     padding: 14px;
+    min-height: auto;
   }
 
   .nickname-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: stretch;
     gap: 10px;
   }
@@ -776,19 +831,29 @@
 
   .chat-messages {
     min-height: 260px;
-    max-height: 260px;
   }
 
   .chat-input-box {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   #sendBtn {
     width: 100%;
   }
 
-  .users-list {
-    max-height: 210px;
+  .user-item {
+    gap: 10px;
+  }
+
+  .user-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .user-time {
+    width: fit-content;
+    text-align: center;
   }
 
   #roomSupportModal > div:last-child {
