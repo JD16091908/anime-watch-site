@@ -540,6 +540,233 @@ function findDefaultContext(videos) {
   };
 }
 
+function getCurrentOverlayContext() {
+  if (!selectedAnime?.videos?.length) return null;
+
+  const videos = selectedAnime.videos;
+  const players = getUniquePlayers(videos);
+
+  if (!players.length) return null;
+
+  if (!selectedPlayer || !players.some((player) => player.name === selectedPlayer)) {
+    selectedPlayer = players[0].name;
+  }
+
+  const byPlayer = getVideosBySelectedPlayer(videos);
+  const seasons = getUniqueSeasons(byPlayer);
+
+  if (!seasons.length) return null;
+
+  if (!selectedSeason || !seasons.some((season) => season.season === selectedSeason)) {
+    selectedSeason = seasons[0].season;
+  }
+
+  const bySeason = byPlayer.filter((video) => getSeasonNumber(video) === selectedSeason);
+  const episodes = getUniqueEpisodes(bySeason);
+
+  if (!episodes.length) return null;
+
+  const currentEpisodeNumber = Number(currentState.episodeNumber) || getEpisodeNumber(episodes[0]);
+
+  return {
+    players,
+    seasons,
+    episodes,
+    currentEpisodeNumber
+  };
+}
+
+function closeAllOverlayDropdowns() {
+  document.querySelectorAll('.overlay-dropdown.open').forEach((dropdown) => {
+    dropdown.classList.remove('open');
+  });
+}
+
+function renderPlayerOverlay() {
+  const playerWrapper = document.getElementById('playerWrapper');
+  if (!playerWrapper) return;
+
+  const existingOverlay = playerWrapper.querySelector('.player-top-overlay');
+  if (existingOverlay) existingOverlay.remove();
+
+  if (!canControl()) return;
+  if (!currentState.embedUrl) return;
+  if (!selectedAnime?.videos?.length) return;
+
+  const context = getCurrentOverlayContext();
+  if (!context) return;
+
+  const { players, seasons, episodes, currentEpisodeNumber } = context;
+
+  const activePlayer = selectedPlayer || players[0]?.name || 'Озвучка';
+  const activeSeason = Number(selectedSeason || seasons[0]?.season || 1);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'player-top-overlay';
+  overlay.innerHTML = `
+    <div class="player-overlay-controls">
+      <div class="overlay-dropdown" data-overlay-dropdown="player">
+        <button class="overlay-control-btn" type="button" data-overlay-toggle="player" title="Выбрать озвучку">
+          <span>${escapeHtml(activePlayer)}</span>
+          <span class="overlay-control-arrow">▾</span>
+        </button>
+
+        <div class="overlay-dropdown-menu">
+          ${players.map((player) => `
+            <button
+              class="overlay-dropdown-item ${player.name === activePlayer ? 'active' : ''}"
+              type="button"
+              data-overlay-player="${escapeHtml(player.name)}"
+            >
+              <span>${escapeHtml(player.name)}</span>
+              <span class="overlay-item-count">${escapeHtml(player.count)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="overlay-dropdown" data-overlay-dropdown="season">
+        <button class="overlay-control-btn" type="button" data-overlay-toggle="season" title="Выбрать сезон">
+          <span>Сезон ${escapeHtml(activeSeason)}</span>
+          <span class="overlay-control-arrow">▾</span>
+        </button>
+
+        <div class="overlay-dropdown-menu">
+          ${seasons.map((season) => `
+            <button
+              class="overlay-dropdown-item ${season.season === activeSeason ? 'active' : ''}"
+              type="button"
+              data-overlay-season="${escapeHtml(season.season)}"
+            >
+              <span>Сезон ${escapeHtml(season.season)}</span>
+              <span class="overlay-item-count">${escapeHtml(season.count)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="overlay-dropdown" data-overlay-dropdown="episode">
+        <button class="overlay-control-btn" type="button" data-overlay-toggle="episode" title="Выбрать серию">
+          <span>Серия ${escapeHtml(currentEpisodeNumber || 1)}</span>
+          <span class="overlay-control-arrow">▾</span>
+        </button>
+
+        <div class="overlay-dropdown-menu-episodes">
+          ${episodes.map((episode) => {
+            const episodeNumber = getEpisodeNumber(episode);
+
+            return `
+              <button
+                class="overlay-dropdown-item overlay-dropdown-item-episode ${episodeNumber === currentEpisodeNumber ? 'active' : ''}"
+                type="button"
+                data-overlay-episode="${escapeHtml(episodeNumber)}"
+              >
+                ${escapeHtml(episodeNumber)}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const toggle = event.target.closest('[data-overlay-toggle]');
+    if (toggle) {
+      const dropdown = toggle.closest('.overlay-dropdown');
+      const wasOpen = dropdown.classList.contains('open');
+
+      closeAllOverlayDropdowns();
+
+      if (!wasOpen) dropdown.classList.add('open');
+      return;
+    }
+
+    const playerButton = event.target.closest('[data-overlay-player]');
+    if (playerButton) {
+      const nextPlayer = playerButton.dataset.overlayPlayer;
+      selectOverlayPlayer(nextPlayer);
+      return;
+    }
+
+    const seasonButton = event.target.closest('[data-overlay-season]');
+    if (seasonButton) {
+      const nextSeason = Number(seasonButton.dataset.overlaySeason);
+      selectOverlaySeason(nextSeason);
+      return;
+    }
+
+    const episodeButton = event.target.closest('[data-overlay-episode]');
+    if (episodeButton) {
+      const nextEpisode = Number(episodeButton.dataset.overlayEpisode);
+      selectOverlayEpisode(nextEpisode);
+    }
+  });
+
+  playerWrapper.appendChild(overlay);
+}
+
+function selectOverlayPlayer(nextPlayer) {
+  if (!canControl() || !selectedAnime?.videos?.length || !nextPlayer) return;
+
+  const videos = selectedAnime.videos;
+  const byPlayer = videos.filter((video) => getPlayerName(video) === nextPlayer && !!getIframeUrl(video));
+  const seasons = getUniqueSeasons(byPlayer);
+
+  if (!seasons.length) return;
+
+  const nextSeason = seasons.some((season) => season.season === selectedSeason)
+    ? selectedSeason
+    : seasons[0].season;
+
+  const bySeason = byPlayer.filter((video) => getSeasonNumber(video) === nextSeason);
+  const episodes = getUniqueEpisodes(bySeason);
+  const currentEpisode = Number(currentState.episodeNumber) || 1;
+
+  const nextEpisode = episodes.find((episode) => getEpisodeNumber(episode) === currentEpisode) || episodes[0];
+
+  if (!nextEpisode) return;
+
+  selectedPlayer = nextPlayer;
+  selectedSeason = nextSeason;
+  closeAllOverlayDropdowns();
+  launchEpisode(nextEpisode, selectedAnime);
+}
+
+function selectOverlaySeason(nextSeason) {
+  if (!canControl() || !selectedAnime?.videos?.length || !Number.isFinite(nextSeason)) return;
+
+  const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
+  const bySeason = byPlayer.filter((video) => getSeasonNumber(video) === nextSeason);
+  const episodes = getUniqueEpisodes(bySeason);
+
+  if (!episodes.length) return;
+
+  const currentEpisode = Number(currentState.episodeNumber) || 1;
+  const nextEpisode = episodes.find((episode) => getEpisodeNumber(episode) === currentEpisode) || episodes[0];
+
+  selectedSeason = nextSeason;
+  closeAllOverlayDropdowns();
+  launchEpisode(nextEpisode, selectedAnime);
+}
+
+function selectOverlayEpisode(nextEpisodeNumber) {
+  if (!canControl() || !selectedAnime?.videos?.length || !Number.isFinite(nextEpisodeNumber)) return;
+
+  const byPlayer = getVideosBySelectedPlayer(selectedAnime.videos);
+  const bySeason = byPlayer.filter((video) => getSeasonNumber(video) === selectedSeason);
+  const episodes = getUniqueEpisodes(bySeason);
+  const episode = episodes.find((item) => getEpisodeNumber(item) === nextEpisodeNumber);
+
+  if (!episode) return;
+
+  closeAllOverlayDropdowns();
+  launchEpisode(episode, selectedAnime);
+}
+
 function getInterpolatedHostTime() {
   if (lastKnownHostTime === null) return null;
   if (currentState.playback.paused) return lastKnownHostTime;
@@ -790,6 +1017,8 @@ function updateControlState() {
   animeList?.querySelectorAll('button').forEach((button) => {
     button.disabled = disabled;
   });
+
+  renderPlayerOverlay();
 }
 
 function updateSelectedAnimeInfoContent(anime = null) {
@@ -840,6 +1069,8 @@ function showPlaceholderUi(title = 'Ничего не выбрано', descripti
 
 function showBlockedAnimeMessage(message = 'Данное аниме запрещено на территории вашей страны') {
   selectedAnime = null;
+  selectedPlayer = null;
+  selectedSeason = null;
   currentLoadedEmbedUrl = null;
 
   currentState = {
@@ -935,6 +1166,8 @@ function loadIframe(embedUrl) {
   bridge.playerType = typeof window.PlayerModule.detectPlayerType === 'function'
     ? window.PlayerModule.detectPlayerType(embedUrl)
     : 'unknown';
+
+  renderPlayerOverlay();
 
   if (!isHost && roomId !== 'solo') {
     setTimeout(() => {
@@ -1413,6 +1646,9 @@ async function selectAnime(item) {
       return;
     }
 
+    selectedAnime = null;
+    selectedPlayer = null;
+    selectedSeason = null;
     updateSelectedAnimeInfoContent(null);
     showPlaceholderUi('Ошибка', error.message || 'Не удалось загрузить аниме');
   }
@@ -1720,6 +1956,7 @@ function bindSocketEvents() {
         }
 
         startUserTimeTimer();
+        renderPlayerOverlay();
       }
     } else {
       pendingPlaybackApply = null;
@@ -1766,6 +2003,7 @@ function bindSocketEvents() {
         }
 
         startUserTimeTimer();
+        renderPlayerOverlay();
       }
     } else {
       pendingPlaybackApply = null;
@@ -1855,6 +2093,9 @@ function bindUiEvents() {
   document.addEventListener('click', (event) => {
     const withinSearch = event.target.closest('.anime-search-section, .center-search-panel');
     if (!withinSearch) hideSearchResultsUi();
+
+    const withinOverlay = event.target.closest('.player-top-overlay');
+    if (!withinOverlay) closeAllOverlayDropdowns();
   });
 
   if (copyLinkBtn) {
@@ -1873,6 +2114,7 @@ function bindUiEvents() {
   if (cinemaModeBtn) {
     cinemaModeBtn.addEventListener('click', () => {
       roomPage?.classList.toggle('cinema-mode');
+      closeAllOverlayDropdowns();
     });
   }
 
@@ -1905,8 +2147,12 @@ function bindUiEvents() {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
-      closeRoomSupportModal(event);
+    if (event.key === 'Escape') {
+      closeAllOverlayDropdowns();
+
+      if (roomSupportModal && !roomSupportModal.classList.contains('hidden')) {
+        closeRoomSupportModal(event);
+      }
     }
   });
 
