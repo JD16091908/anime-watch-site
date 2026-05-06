@@ -303,6 +303,33 @@ function normalizeKodikLink(link) {
   return `https://${value}`;
 }
 
+function getTranslationTitle(item) {
+  return (
+    item?.translation?.title ||
+    item?.translation?.name ||
+    item?.translation_title ||
+    item?.translation_name ||
+    'Озвучка'
+  );
+}
+
+function getTranslationId(item) {
+  return (
+    item?.translation?.id ||
+    item?.translation_id ||
+    null
+  );
+}
+
+function getBaseItemLink(item) {
+  return normalizeKodikLink(
+    item?.link ||
+    item?.iframe_url ||
+    item?.iframeUrl ||
+    item?.url
+  );
+}
+
 function addEpisodeParam(link, episodeNumber) {
   const safeLink = normalizeKodikLink(link);
   const safeEpisodeNumber = Number(episodeNumber) || 1;
@@ -321,28 +348,6 @@ function addEpisodeParam(link, episodeNumber) {
     const separator = safeLink.includes('?') ? '&' : '?';
     return `${safeLink}${separator}episode=${encodeURIComponent(String(safeEpisodeNumber))}`;
   }
-}
-
-function getTranslationTitle(item) {
-  return (
-    item?.translation?.title ||
-    item?.translation?.name ||
-    item?.translation_title ||
-    item?.translation_name ||
-    ''
-  );
-}
-
-function getTranslationId(item) {
-  return (
-    item?.translation?.id ||
-    item?.translation_id ||
-    null
-  );
-}
-
-function getBaseItemLink(item) {
-  return normalizeKodikLink(item?.link || item?.iframe_url || item?.iframeUrl || item?.url);
 }
 
 function extractEpisodeLink(data) {
@@ -378,6 +383,7 @@ function extractEpisodesFromEpisodesObject(item) {
   const baseLink = getBaseItemLink(item);
   const translationTitle = getTranslationTitle(item);
   const translationId = getTranslationId(item);
+  const seasonNumber = Number(item?.season) || 1;
 
   for (const [num, data] of Object.entries(episodes)) {
     const episodeNumber = Number(num) || Number(data?.episode) || Number(data?.number) || 1;
@@ -387,9 +393,9 @@ function extractEpisodesFromEpisodesObject(item) {
     if (!iframeUrl) continue;
 
     result.push({
-      videoId: `${item.id || 'anime'}-${episodeNumber}-${translationId || translationTitle || 't'}`,
+      videoId: `${item.id || 'anime'}-${seasonNumber}-${episodeNumber}-${translationId || translationTitle || 't'}`,
       number: episodeNumber,
-      season: Number(item?.season) || 1,
+      season: seasonNumber,
       index: episodeNumber,
       iframeUrl,
       dubbing: translationTitle,
@@ -417,12 +423,27 @@ function extractEpisodesFromSeasonsObject(item) {
 
   for (const [seasonKey, seasonData] of Object.entries(seasons)) {
     const seasonNumber = Number(seasonKey) || Number(seasonData?.season) || 1;
-    const episodes = seasonData?.episodes || seasonData;
+
+    let episodes = null;
+
+    if (seasonData?.episodes && typeof seasonData.episodes === 'object') {
+      episodes = seasonData.episodes;
+    } else if (seasonData && typeof seasonData === 'object') {
+      episodes = seasonData;
+    }
 
     if (!episodes || typeof episodes !== 'object') continue;
 
     for (const [episodeKey, episodeData] of Object.entries(episodes)) {
-      if (episodeKey === 'link' || episodeKey === 'title' || episodeKey === 'id') continue;
+      if (
+        episodeKey === 'id' ||
+        episodeKey === 'link' ||
+        episodeKey === 'url' ||
+        episodeKey === 'title' ||
+        episodeKey === 'season'
+      ) {
+        continue;
+      }
 
       const episodeNumber =
         Number(episodeKey) ||
@@ -478,11 +499,11 @@ function extractSingleVideo(item) {
 }
 
 function extractEpisodes(item) {
-  const fromSeasons = extractEpisodesFromSeasonsObject(item);
-  if (fromSeasons.length) return fromSeasons;
-
   const fromEpisodes = extractEpisodesFromEpisodesObject(item);
   if (fromEpisodes.length) return fromEpisodes;
+
+  const fromSeasons = extractEpisodesFromSeasonsObject(item);
+  if (fromSeasons.length) return fromSeasons;
 
   return extractSingleVideo(item);
 }
@@ -518,19 +539,28 @@ function filterByExactSelection(raw, selected = {}) {
   if (selected.shikimoriId) {
     const wanted = String(selected.shikimoriId);
     const filtered = candidates.filter(item => String(shikimoriIdOf(item) || '') === wanted);
-    if (filtered.length) candidates = filtered;
-  }
 
-  if (selected.kodikId) {
-    const wanted = String(selected.kodikId);
-    const filtered = candidates.filter(item => String(item?.id || '') === wanted);
-    if (filtered.length) candidates = filtered;
+    if (filtered.length) {
+      return filtered;
+    }
   }
 
   if (selected.materialId) {
     const wanted = String(selected.materialId);
     const filtered = candidates.filter(item => String(materialIdOf(item) || '') === wanted);
-    if (filtered.length) candidates = filtered;
+
+    if (filtered.length) {
+      return filtered;
+    }
+  }
+
+  if (selected.kodikId) {
+    const wanted = String(selected.kodikId);
+    const filtered = candidates.filter(item => String(item?.id || '') === wanted);
+
+    if (filtered.length) {
+      return filtered;
+    }
   }
 
   return candidates;
@@ -556,7 +586,7 @@ async function animeBySelection(selected = {}) {
     );
   }
 
-  if (selected.kodikId) {
+  if (selected.kodikId && !selected.shikimoriId) {
     requests.push(
       kodikGet('/search', {
         id: selected.kodikId,
@@ -612,11 +642,6 @@ async function animeBySelection(selected = {}) {
     }))
     .filter(x => x.score > -100000)
     .sort((a, b) => {
-      const aIsSerial = isSerial(a.item) ? 1 : 0;
-      const bIsSerial = isSerial(b.item) ? 1 : 0;
-
-      if (bIsSerial !== aIsSerial) return bIsSerial - aIsSerial;
-
       const yearA = Number(yearOf(a.item)) || 9999;
       const yearB = Number(yearOf(b.item)) || 9999;
 
