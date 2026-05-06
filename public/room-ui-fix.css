@@ -1,6 +1,7 @@
-/* UI fix: поиск во всю ширину, ник справа в свободной зоне, чат рядом с плеером */
+/* UI fix: аккуратная компоновка, ник в свободной зоне, чат ровно на уровне плеера */
 
-/* Общая сетка комнаты */
+/* ===== ОСНОВНАЯ СЕТКА ===== */
+
 .room-layout-centered {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
@@ -8,13 +9,16 @@
     "search search"
     "selected nickname"
     "player chat"
-    "ad chat";
+    "ad .";
   gap: 14px;
   align-items: start;
 }
 
-/* Делаем внутренние блоки player-area отдельными grid-элементами */
 .player-area-centered {
+  display: contents;
+}
+
+.right-sidebar {
   display: contents;
 }
 
@@ -34,129 +38,175 @@
   grid-area: ad;
 }
 
-/* Делаем блоки правой панели отдельными grid-элементами */
-.right-sidebar {
-  display: contents;
+.nickname-block {
+  grid-area: nickname;
 }
 
 .chat-block {
   grid-area: chat;
 }
 
-.nickname-block {
-  grid-area: nickname;
+/* Убираем старое поднятие плеера, из-за которого чат был ниже визуально */
+.player-shell-raised {
+  margin-top: 0 !important;
 }
 
-/* Общий вид правых блоков после display: contents */
-.chat-block,
-.nickname-block {
+/* ===== ОБЩИЙ СТИЛЬ КАРТОЧЕК СПРАВА ===== */
+
+.nickname-block,
+.chat-block {
   min-width: 0;
   margin-bottom: 0;
   padding: 14px;
-  border-radius: var(--room-radius-xl);
+  border-radius: 22px;
   background:
-    linear-gradient(180deg, rgba(28, 39, 66, 0.95) 0%, rgba(19, 30, 53, 0.97) 100%);
+    radial-gradient(circle at 10% 0%, rgba(123, 180, 255, 0.10), transparent 28%),
+    radial-gradient(circle at 100% 14%, rgba(255, 132, 168, 0.06), transparent 22%),
+    linear-gradient(180deg, rgba(28, 39, 66, 0.96) 0%, rgba(19, 30, 53, 0.98) 100%);
   border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow: var(--room-shadow-soft);
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(12px);
   position: relative;
   overflow: hidden;
 }
 
-.chat-block::before,
-.nickname-block::before {
+.nickname-block::before,
+.chat-block::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(circle at 8% 0%, rgba(123, 180, 255, 0.08), transparent 24%),
-    radial-gradient(circle at 100% 18%, rgba(255, 132, 168, 0.055), transparent 24%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%);
   pointer-events: none;
 }
 
-.chat-block > *,
-.nickname-block > * {
+.nickname-block > *,
+.chat-block > * {
   position: relative;
   z-index: 1;
 }
 
-/* Блок ника справа в свободном месте */
+/* ===== БЛОК НИКА ===== */
+
 .nickname-block {
-  align-self: stretch;
-  min-height: 128px;
+  align-self: start;
 }
 
 .nickname-panel {
-  height: 100%;
-  min-height: 100px;
   margin-bottom: 0;
-  padding: 14px;
+  padding: 16px;
   border-radius: 18px;
   background:
-    radial-gradient(circle at 8% 0%, rgba(143, 164, 255, 0.12), transparent 34%),
-    linear-gradient(180deg, rgba(39, 53, 84, 0.92), rgba(30, 42, 70, 0.94));
-  border: 1px solid rgba(255, 255, 255, 0.10);
+    radial-gradient(circle at 12% 0%, rgba(143, 164, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(43, 58, 94, 0.96), rgba(31, 44, 73, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .nickname-label {
-  margin-bottom: 0;
-  color: #dce7ff;
-  font-size: 13px;
-  font-weight: 850;
-  line-height: 1.3;
+  display: block;
+  margin-bottom: 10px;
+  color: #e5ecff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .nickname-row {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
 }
 
 .nickname-input {
+  flex: 1;
+  min-width: 0;
   height: 44px;
   padding: 0 14px;
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(38, 50, 80, 0.96), rgba(30, 41, 69, 0.98));
   border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(35, 47, 75, 0.98), rgba(28, 39, 65, 0.98));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 7px 18px rgba(0, 0, 0, 0.12);
+    0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.nickname-input::placeholder {
+  color: #a8b7da;
 }
 
 .nickname-save-btn {
-  min-width: 108px;
+  min-width: 112px;
   height: 44px;
   min-height: 44px;
   border-radius: 14px;
 }
 
-/* Чат начинается на уровне плеера и не прилипает к нику */
+/* ===== ЧАТ ===== */
+
 .chat-block {
-  min-height: 100%;
   display: flex;
   flex-direction: column;
+  align-self: start;
+  min-height: 100%;
 }
 
 .chat-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.chat-messages {
-  flex: 1;
-  min-height: 360px;
-  max-height: none;
+.chat-block-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  color: #f4f8ff;
 }
 
-/* Выпадающий список участников */
+.chat-users-toggle-btn {
+  min-width: auto;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  gap: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.05)),
+    linear-gradient(90deg, rgba(123, 140, 255, 0.15), rgba(96, 181, 255, 0.12));
+  border-color: rgba(176, 196, 255, 0.18);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chat-users-toggle-btn::after {
+  content: "▾";
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.9;
+  transition: transform 0.18s ease;
+}
+
+.chat-users-toggle-btn[aria-expanded="true"]::after {
+  transform: rotate(180deg);
+}
+
+/* ===== ВЫПАДАЮЩИЙ СПИСОК УЧАСТНИКОВ ===== */
+
 .users-dropdown-panel {
   overflow: hidden;
   max-height: 0;
@@ -164,9 +214,9 @@
   margin-bottom: 0;
   padding: 0 12px;
   pointer-events: none;
-  border-radius: var(--room-radius-lg);
+  border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(31, 42, 68, 0.95) 0%, rgba(23, 33, 55, 0.97) 100%);
+    linear-gradient(180deg, rgba(32, 44, 72, 0.96) 0%, rgba(24, 35, 59, 0.98) 100%);
   border: 1px solid transparent;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
   transition:
@@ -215,12 +265,14 @@
   overflow-y: auto;
 }
 
+/* ===== ЭЛЕМЕНТЫ УЧАСТНИКОВ ===== */
+
 .user-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 12px;
-  border-radius: var(--room-radius-lg);
+  border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(39, 53, 84, 0.98) 0%, rgba(31, 44, 72, 0.98) 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -387,14 +439,126 @@
   }
 }
 
-/* Оставляем только нативные селекторы Kodik внутри плеера */
+/* ===== СООБЩЕНИЯ ЧАТА ===== */
+
+.chat-messages {
+  flex: 1;
+  min-height: 430px;
+  max-height: 430px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(18, 26, 46, 0.88), rgba(20, 31, 56, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.chat-message,
+.system-message {
+  padding: 12px 14px;
+  border-radius: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+}
+
+.chat-message {
+  background:
+    linear-gradient(180deg, rgba(39, 53, 84, 0.98) 0%, rgba(31, 44, 72, 0.98) 100%);
+}
+
+.chat-message.self,
+.chat-message.self-message {
+  background:
+    linear-gradient(180deg, rgba(68, 55, 118, 0.98) 0%, rgba(53, 42, 99, 0.98) 100%);
+}
+
+.system-message {
+  background: rgba(39, 53, 84, 0.84);
+  color: #adc2ff;
+  font-style: italic;
+}
+
+.chat-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.chat-time {
+  color: #b8c5e4;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.chat-message-body {
+  color: #fff;
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+/* ===== НИЖНЯЯ ПАНЕЛЬ ЧАТА ===== */
+
+.chat-input-box {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-input-box input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(180deg, rgba(35, 47, 75, 0.98), rgba(28, 39, 65, 0.98));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 6px 16px rgba(0, 0, 0, 0.10);
+}
+
+.chat-input-box input::placeholder {
+  color: #a7b6d8;
+}
+
+#sendBtn {
+  min-width: 96px;
+  height: 46px;
+  border-radius: 14px;
+}
+
+/* ===== ПРЯЧЕМ ЛИШНИЙ OVERLAY ПЛЕЕРА ===== */
+
 #playerTopOverlay {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
 }
 
-/* Верхние кнопки: Пригласить / Кино / Поддержать */
+/* ===== ВЕРХНИЕ КНОПКИ ===== */
+
 .room-page #copyLinkBtn,
 .room-page #cinemaModeBtn,
 .room-page #supportRoomBtn {
@@ -429,7 +593,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* Поддержать — темнее и аккуратнее */
 .room-page #supportRoomBtn {
   border-color: rgba(160, 120, 165, 0.34);
   background:
@@ -444,7 +607,8 @@
     rgba(15, 18, 34, 0.94);
 }
 
-/* Кнопки Boosty / DonationAlerts */
+/* ===== КНОПКИ МОДАЛКИ ПОДДЕРЖКИ ===== */
+
 .room-support-link,
 .room-support-link-boosty,
 .room-support-link-da {
@@ -542,10 +706,10 @@
   transform: translateY(16px) scale(0.96);
 }
 
-/* Планшеты и мобилки */
+/* ===== АДАПТИВ ===== */
+
 @media (max-width: 1200px) {
   .room-layout-centered {
-    display: grid;
     grid-template-columns: 1fr;
     grid-template-areas:
       "search"
@@ -565,17 +729,12 @@
     min-height: auto;
   }
 
-  .nickname-panel {
-    min-height: auto;
-  }
-
   .chat-block {
     min-height: 420px;
   }
 
   .chat-messages {
     min-height: 320px;
-    height: 320px;
     max-height: 320px;
   }
 
@@ -593,10 +752,18 @@
     min-height: 44px;
   }
 
+  .nickname-panel {
+    padding: 14px;
+  }
+
   .nickname-row {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
+  }
+
+  .nickname-input {
+    width: 100%;
   }
 
   .nickname-save-btn {
@@ -609,8 +776,15 @@
 
   .chat-messages {
     min-height: 260px;
-    height: 260px;
     max-height: 260px;
+  }
+
+  .chat-input-box {
+    flex-direction: column;
+  }
+
+  #sendBtn {
+    width: 100%;
   }
 
   .users-list {
