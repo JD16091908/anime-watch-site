@@ -61,7 +61,7 @@ function getSearchQueries(query) {
     return HUNTER_QUERIES;
   }
 
-  return [query, n].filter(Boolean);
+  return [...new Set([query, n].filter(Boolean))];
 }
 
 async function kodikGet(endpoint, params = {}) {
@@ -71,14 +71,14 @@ async function kodikGet(endpoint, params = {}) {
 
   const query = new URLSearchParams({
     token: KODIK_TOKEN,
-    limit: '80',
+    limit: '100',
     ...params
   });
 
   const url = `${KODIK_API_BASE}${endpoint}?${query.toString()}`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 9000);
 
   try {
     const res = await fetch(url, {
@@ -93,7 +93,11 @@ async function kodikGet(endpoint, params = {}) {
       throw new Error(`Kodik HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
 
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`Kodik returned invalid JSON: ${text.slice(0, 200)}`);
+    }
   } finally {
     clearTimeout(timeout);
   }
@@ -120,7 +124,7 @@ function posterOf(item) {
     '';
 
   if (!poster) return '';
-  return poster.startsWith('//') ? `https:${poster}` : poster;
+  return String(poster).startsWith('//') ? `https:${poster}` : String(poster);
 }
 
 function yearOf(item) {
@@ -288,71 +292,223 @@ async function searchAnime(query) {
   return result;
 }
 
-function buildIframe(link) {
-  if (!link) return null;
-  return String(link).startsWith('//') ? `https:${link}` : link;
+function normalizeKodikLink(link) {
+  const value = String(link || '').trim();
+
+  if (!value) return null;
+  if (value.startsWith('//')) return `https:${value}`;
+  if (value.startsWith('http://')) return value.replace(/^http:\/\//i, 'https://');
+  if (value.startsWith('https://')) return value;
+
+  return `https://${value}`;
 }
 
-function extractEpisodes(item) {
-  const result = [];
+function addEpisodeParam(link, episodeNumber) {
+  const safeLink = normalizeKodikLink(link);
+  const safeEpisodeNumber = Number(episodeNumber) || 1;
 
-  if (item?.episodes && typeof item.episodes === 'object') {
-    for (const [num, data] of Object.entries(item.episodes)) {
-      const iframeUrl = buildIframe(
-        typeof data === 'string' ? data : data?.link || data?.url
-      );
+  if (!safeLink) return null;
 
-      if (!iframeUrl) continue;
+  try {
+    const url = new URL(safeLink);
 
-      result.push({
-        videoId: `${item.id || 'anime'}-${num}-${item?.translation?.id || 't'}`,
-        number: Number(num) || 1,
-        season: Number(item?.season) || 1,
-        index: Number(num) || 1,
-        iframeUrl,
-        dubbing: item?.translation?.title || item?.translation?.name || '',
-        player: item?.translation?.title || item?.translation?.name || '',
-        playerId: item?.translation?.id || null,
-        translationId: item?.translation?.id || null,
-        translationTitle: item?.translation?.title || item?.translation?.name || ''
-      });
+    if (!url.searchParams.has('episode')) {
+      url.searchParams.set('episode', String(safeEpisodeNumber));
     }
+
+    return url.toString();
+  } catch {
+    const separator = safeLink.includes('?') ? '&' : '?';
+    return `${safeLink}${separator}episode=${encodeURIComponent(String(safeEpisodeNumber))}`;
+  }
+}
+
+function getTranslationTitle(item) {
+  return (
+    item?.translation?.title ||
+    item?.translation?.name ||
+    item?.translation_title ||
+    item?.translation_name ||
+    ''
+  );
+}
+
+function getTranslationId(item) {
+  return (
+    item?.translation?.id ||
+    item?.translation_id ||
+    null
+  );
+}
+
+function getBaseItemLink(item) {
+  return normalizeKodikLink(item?.link || item?.iframe_url || item?.iframeUrl || item?.url);
+}
+
+function extractEpisodeLink(data) {
+  if (!data) return null;
+
+  if (typeof data === 'string') {
+    return normalizeKodikLink(data);
   }
 
-  if (result.length) return result;
+  if (typeof data !== 'object') {
+    return null;
+  }
 
-  const link = buildIframe(item?.link);
-  if (link) {
+  return normalizeKodikLink(
+    data.link ||
+    data.url ||
+    data.iframe_url ||
+    data.iframeUrl ||
+    data.src ||
+    data.player_link ||
+    data.playerLink
+  );
+}
+
+function extractEpisodesFromEpisodesObject(item) {
+  const result = [];
+  const episodes = item?.episodes;
+
+  if (!episodes || typeof episodes !== 'object' || Array.isArray(episodes)) {
+    return result;
+  }
+
+  const baseLink = getBaseItemLink(item);
+  const translationTitle = getTranslationTitle(item);
+  const translationId = getTranslationId(item);
+
+  for (const [num, data] of Object.entries(episodes)) {
+    const episodeNumber = Number(num) || Number(data?.episode) || Number(data?.number) || 1;
+    const rawEpisodeLink = extractEpisodeLink(data);
+    const iframeUrl = rawEpisodeLink || addEpisodeParam(baseLink, episodeNumber);
+
+    if (!iframeUrl) continue;
+
     result.push({
-      videoId: `${item.id || 'movie'}-1-${item?.translation?.id || 't'}`,
-      number: 1,
-      season: 1,
-      index: 1,
-      iframeUrl: link,
-      dubbing: item?.translation?.title || item?.translation?.name || '',
-      player: item?.translation?.title || item?.translation?.name || '',
-      playerId: item?.translation?.id || null,
-      translationId: item?.translation?.id || null,
-      translationTitle: item?.translation?.title || item?.translation?.name || ''
+      videoId: `${item.id || 'anime'}-${episodeNumber}-${translationId || translationTitle || 't'}`,
+      number: episodeNumber,
+      season: Number(item?.season) || 1,
+      index: episodeNumber,
+      iframeUrl,
+      dubbing: translationTitle,
+      player: translationTitle,
+      playerId: translationId,
+      translationId,
+      translationTitle
     });
   }
 
   return result;
 }
 
+function extractEpisodesFromSeasonsObject(item) {
+  const result = [];
+  const seasons = item?.seasons;
+
+  if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) {
+    return result;
+  }
+
+  const baseLink = getBaseItemLink(item);
+  const translationTitle = getTranslationTitle(item);
+  const translationId = getTranslationId(item);
+
+  for (const [seasonKey, seasonData] of Object.entries(seasons)) {
+    const seasonNumber = Number(seasonKey) || Number(seasonData?.season) || 1;
+    const episodes = seasonData?.episodes || seasonData;
+
+    if (!episodes || typeof episodes !== 'object') continue;
+
+    for (const [episodeKey, episodeData] of Object.entries(episodes)) {
+      if (episodeKey === 'link' || episodeKey === 'title' || episodeKey === 'id') continue;
+
+      const episodeNumber =
+        Number(episodeKey) ||
+        Number(episodeData?.episode) ||
+        Number(episodeData?.number) ||
+        1;
+
+      const rawEpisodeLink = extractEpisodeLink(episodeData);
+      const iframeUrl = rawEpisodeLink || addEpisodeParam(baseLink, episodeNumber);
+
+      if (!iframeUrl) continue;
+
+      result.push({
+        videoId: `${item.id || 'anime'}-${seasonNumber}-${episodeNumber}-${translationId || translationTitle || 't'}`,
+        number: episodeNumber,
+        season: seasonNumber,
+        index: episodeNumber,
+        iframeUrl,
+        dubbing: translationTitle,
+        player: translationTitle,
+        playerId: translationId,
+        translationId,
+        translationTitle
+      });
+    }
+  }
+
+  return result;
+}
+
+function extractSingleVideo(item) {
+  const link = getBaseItemLink(item);
+
+  if (!link) return [];
+
+  const translationTitle = getTranslationTitle(item);
+  const translationId = getTranslationId(item);
+
+  return [
+    {
+      videoId: `${item.id || 'movie'}-1-${translationId || translationTitle || 't'}`,
+      number: 1,
+      season: 1,
+      index: 1,
+      iframeUrl: link,
+      dubbing: translationTitle,
+      player: translationTitle,
+      playerId: translationId,
+      translationId,
+      translationTitle
+    }
+  ];
+}
+
+function extractEpisodes(item) {
+  const fromSeasons = extractEpisodesFromSeasonsObject(item);
+  if (fromSeasons.length) return fromSeasons;
+
+  const fromEpisodes = extractEpisodesFromEpisodesObject(item);
+  if (fromEpisodes.length) return fromEpisodes;
+
+  return extractSingleVideo(item);
+}
+
 function mergeEpisodes(items) {
   const map = new Map();
 
   for (const item of items) {
-    for (const ep of extractEpisodes(item)) {
-      const key = `${ep.season}:${ep.number}:${ep.translationId || ep.translationTitle}`;
-      if (!map.has(key)) map.set(key, ep);
+    const episodes = extractEpisodes(item);
+
+    for (const ep of episodes) {
+      if (!ep?.iframeUrl) continue;
+
+      const key = `${ep.season}:${ep.number}:${ep.translationId || ep.translationTitle || ep.player || 'unknown'}`;
+
+      if (!map.has(key)) {
+        map.set(key, ep);
+      }
     }
   }
 
   return [...map.values()].sort((a, b) => {
     if (a.season !== b.season) return a.season - b.season;
-    return a.number - b.number;
+    if (a.number !== b.number) return a.number - b.number;
+
+    return String(a.player || '').localeCompare(String(b.player || ''), 'ru');
   });
 }
 
@@ -425,6 +581,12 @@ async function animeBySelection(selected = {}) {
           with_material_data: 'true',
           with_episodes: 'true',
           types: KODIK_TYPES
+        }),
+        kodikGet('/list', {
+          title: q,
+          with_material_data: 'true',
+          with_episodes: 'true',
+          types: KODIK_TYPES
         })
       );
     }
@@ -450,6 +612,11 @@ async function animeBySelection(selected = {}) {
     }))
     .filter(x => x.score > -100000)
     .sort((a, b) => {
+      const aIsSerial = isSerial(a.item) ? 1 : 0;
+      const bIsSerial = isSerial(b.item) ? 1 : 0;
+
+      if (bIsSerial !== aIsSerial) return bIsSerial - aIsSerial;
+
       const yearA = Number(yearOf(a.item)) || 9999;
       const yearB = Number(yearOf(b.item)) || 9999;
 
@@ -475,6 +642,7 @@ async function animeBySelection(selected = {}) {
     type: typeOf(first),
     status: first?.material_data?.anime_status || first?.status || '',
     shikimoriId,
+    kodikId,
     episodes: videos.length || null,
     videos
   };
