@@ -1,5 +1,7 @@
 const rooms = new Map();
-// roomId -> { users: Map(userKey -> user), hostKey, state }
+// roomId -> { users: Map(userKey -> user), hostKey, state, cleanupTimer }
+
+const ROOM_EMPTY_TTL_MS = 30 * 60 * 1000;
 
 const EMPTY_PLAYBACK = () => ({
   paused: true,
@@ -37,6 +39,26 @@ function normalizeTime(value, fallback = 0) {
   return time;
 }
 
+function clearRoomCleanup(room) {
+  if (!room?.cleanupTimer) return;
+
+  clearTimeout(room.cleanupTimer);
+  room.cleanupTimer = null;
+}
+
+function scheduleRoomCleanup(roomId, room) {
+  clearRoomCleanup(room);
+
+  room.cleanupTimer = setTimeout(() => {
+    const currentRoom = rooms.get(roomId);
+
+    if (!currentRoom) return;
+    if (currentRoom.users.size > 0) return;
+
+    rooms.delete(roomId);
+  }, ROOM_EMPTY_TTL_MS);
+}
+
 function getRoom(roomId) {
   const safeRoomId = sanitizeRoomId(roomId);
 
@@ -44,11 +66,15 @@ function getRoom(roomId) {
     rooms.set(safeRoomId, {
       users: new Map(),
       hostKey: null,
-      state: createEmptyState()
+      state: createEmptyState(),
+      cleanupTimer: null
     });
   }
 
-  return rooms.get(safeRoomId);
+  const room = rooms.get(safeRoomId);
+  clearRoomCleanup(room);
+
+  return room;
 }
 
 function getEffectivePlayback(playback) {
@@ -96,19 +122,14 @@ function emitSyncToSocket(socket, room, userKey) {
   });
 }
 
-function makeUserHost(io, roomId, room, userKey) {
+function emitHostStatusToSocket(socket, room, userKey) {
+  if (room.hostKey !== userKey) return;
+  socket.emit('you-are-host');
+}
+
+function setInitialHostIfNeeded(room, userKey) {
+  if (room.hostKey) return;
   room.hostKey = userKey;
-
-  if (!userKey) return;
-
-  const user = room.users.get(userKey);
-  if (!user) return;
-
-  const nextSocket = io.sockets.sockets.get(user.socketId);
-  if (!nextSocket) return;
-
-  nextSocket.emit('you-are-host');
-  emitSyncToSocket(nextSocket, room, userKey);
 }
 
 function registerRoomSockets(io) {
@@ -144,10 +165,8 @@ function registerRoomSockets(io) {
         timeUpdatedAt: existingUser?.timeUpdatedAt || Date.now()
       });
 
-      if (!room.hostKey || !room.users.has(room.hostKey)) {
-        makeUserHost(io, safeRoomId, room, safeUserKey);
-      }
-
+      setInitialHostIfNeeded(room, safeUserKey);
+      emitHostStatusToSocket(socket, room, safeUserKey);
       emitSyncToSocket(socket, room, safeUserKey);
       emitUsers(io, safeRoomId, room);
     });
@@ -232,6 +251,7 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
+      emitHostStatusToSocket(socket, room, currentUserKey);
       emitSyncToSocket(socket, room, currentUserKey);
     });
 
@@ -262,15 +282,14 @@ function registerRoomSockets(io) {
 
       room.users.delete(currentUserKey);
 
-      if (room.hostKey === currentUserKey) {
-        const nextUserKey = [...room.users.keys()][0] || null;
-        makeUserHost(io, currentRoomId, room, nextUserKey);
-      }
-
+      // ВАЖНО:
+      // Хоста больше НЕ передаём следующему пользователю.
+      // room.hostKey остаётся закреплённым за тем же userKey.
+      // Если хост обновит страницу или временно выйдет, он вернётся хостом.
       emitUsers(io, currentRoomId, room);
 
       if (room.users.size === 0) {
-        rooms.delete(currentRoomId);
+        scheduleRoomCleanup(currentRoomId, room);
       }
     });
   });
