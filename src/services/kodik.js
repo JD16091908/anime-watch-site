@@ -129,7 +129,16 @@ function posterOf(item) {
   if (!poster) return '';
 
   const value = String(poster).trim();
-  return value.startsWith('//') ? `https:${value}` : value;
+
+  if (value.startsWith('//')) {
+    return `https:${value}`;
+  }
+
+  if (value.startsWith('http://')) {
+    return value.replace(/^http:\/\//i, 'https://');
+  }
+
+  return value;
 }
 
 function yearOf(item) {
@@ -310,27 +319,19 @@ function normalizeKodikLink(link) {
 
   if (!value) return null;
 
-  let result = value;
-
-  if (result.startsWith('//')) {
-    result = `https:${result}`;
+  if (value.startsWith('//')) {
+    return `https:${value}`;
   }
 
-  if (result.startsWith('http://')) {
-    result = result.replace(/^http:\/\//i, 'https://');
+  if (value.startsWith('http://')) {
+    return value.replace(/^http:\/\//i, 'https://');
   }
 
-  if (!result.startsWith('https://')) {
-    result = `https://${result.replace(/^\/+/, '')}`;
+  if (!value.startsWith('https://')) {
+    return `https://${value.replace(/^\/+/, '')}`;
   }
 
-  result = result
-    .replace('https://kodikplayer.com/', 'https://kodik.info/')
-    .replace('https://www.kodikplayer.com/', 'https://kodik.info/')
-    .replace('https://kodikplayer.ru/', 'https://kodik.info/')
-    .replace('https://www.kodikplayer.ru/', 'https://kodik.info/');
-
-  return result;
+  return value;
 }
 
 function getTranslationTitle(item) {
@@ -581,6 +582,7 @@ function mergeEpisodes(items) {
 
   return [...map.values()].sort((a, b) => {
     if (a.season !== b.season) return a.season - b.season;
+
     if (String(a.player || '') !== String(b.player || '')) {
       return String(a.player || '').localeCompare(String(b.player || ''), 'ru');
     }
