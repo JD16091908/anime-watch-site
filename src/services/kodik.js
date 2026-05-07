@@ -420,7 +420,15 @@ function getPreferredEpisodeLink(item, episodeData, seasonNumber, episodeNumber)
   const baseLink = getBaseItemLink(item);
   const episodeLink = extractEpisodeLink(episodeData);
 
-  return addEpisodeParams(episodeLink || baseLink, seasonNumber, episodeNumber);
+  if (baseLink) {
+    return addEpisodeParams(baseLink, seasonNumber, episodeNumber);
+  }
+
+  if (episodeLink) {
+    return addEpisodeParams(episodeLink, seasonNumber, episodeNumber);
+  }
+
+  return null;
 }
 
 function buildEpisode({
@@ -542,15 +550,12 @@ function extractSingleVideo(item) {
 
   if (!link) return [];
 
-  const seasonNumber = getSeasonNumberFromItem(item, 1);
-  const episodeNumber = 1;
-
   return [
     buildEpisode({
       item,
-      seasonNumber,
-      episodeNumber,
-      iframeUrl: addEpisodeParams(link, seasonNumber, episodeNumber)
+      seasonNumber: getSeasonNumberFromItem(item, 1),
+      episodeNumber: 1,
+      iframeUrl: addEpisodeParams(link, getSeasonNumberFromItem(item, 1), 1) || link
     })
   ];
 }
