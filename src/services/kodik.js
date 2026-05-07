@@ -382,9 +382,7 @@ function addEpisodeParam(link, episodeNumber) {
   try {
     const url = new URL(safeLink);
 
-    if (!url.searchParams.has('episode')) {
-      url.searchParams.set('episode', String(safeEpisodeNumber));
-    }
+    url.searchParams.set('episode', String(safeEpisodeNumber));
 
     return url.toString();
   } catch {
@@ -413,6 +411,13 @@ function extractEpisodeLink(data) {
     data.player_link ||
     data.playerLink
   );
+}
+
+function getPreferredEpisodeLink(item, episodeData, episodeNumber) {
+  const baseLink = getBaseItemLink(item);
+  const episodeLink = extractEpisodeLink(episodeData);
+
+  return addEpisodeParam(baseLink, episodeNumber) || episodeLink;
 }
 
 function buildEpisode({
@@ -446,7 +451,6 @@ function extractEpisodesFromEpisodesObject(item) {
     return result;
   }
 
-  const baseLink = getBaseItemLink(item);
   const seasonNumber = getSeasonNumberFromItem(item, 1);
 
   for (const [episodeKey, episodeData] of Object.entries(episodes)) {
@@ -457,8 +461,7 @@ function extractEpisodesFromEpisodesObject(item) {
       Number(episodeData?.episode_number) ||
       1;
 
-    const rawEpisodeLink = extractEpisodeLink(episodeData);
-    const iframeUrl = rawEpisodeLink || addEpisodeParam(baseLink, episodeNumber);
+    const iframeUrl = getPreferredEpisodeLink(item, episodeData, episodeNumber);
 
     if (!iframeUrl) continue;
 
@@ -480,8 +483,6 @@ function extractEpisodesFromSeasonsObject(item) {
   if (!seasons || typeof seasons !== 'object' || Array.isArray(seasons)) {
     return result;
   }
-
-  const baseLink = getBaseItemLink(item);
 
   for (const [seasonKey, seasonData] of Object.entries(seasons)) {
     const seasonNumber =
@@ -517,8 +518,7 @@ function extractEpisodesFromSeasonsObject(item) {
         Number(episodeData?.episode_number) ||
         1;
 
-      const rawEpisodeLink = extractEpisodeLink(episodeData);
-      const iframeUrl = rawEpisodeLink || addEpisodeParam(baseLink, episodeNumber);
+      const iframeUrl = getPreferredEpisodeLink(item, episodeData, episodeNumber);
 
       if (!iframeUrl) continue;
 
@@ -544,7 +544,7 @@ function extractSingleVideo(item) {
       item,
       seasonNumber: getSeasonNumberFromItem(item, 1),
       episodeNumber: 1,
-      iframeUrl: link
+      iframeUrl: addEpisodeParam(link, 1) || link
     })
   ];
 }
