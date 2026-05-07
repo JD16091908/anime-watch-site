@@ -1,5 +1,5 @@
 const rooms = new Map();
-// roomId -> { users: Map(userKey -> user), hostKey, state, cleanupTimer }
+// roomId -> { users: Map(userKey -> user), hostKey, state, cleanupTimer, createdAt, lastHostSeenAt }
 
 const ROOM_EMPTY_TTL_MS = 30 * 60 * 1000;
 
@@ -67,7 +67,9 @@ function getRoom(roomId) {
       users: new Map(),
       hostKey: null,
       state: createEmptyState(),
-      cleanupTimer: null
+      cleanupTimer: null,
+      createdAt: Date.now(),
+      lastHostSeenAt: 0
     });
   }
 
@@ -101,9 +103,13 @@ function getEffectivePlayback(playback) {
 }
 
 function buildUsersList(room) {
+  const hostIsOnline = room.hostKey ? room.users.has(room.hostKey) : false;
+
   return [...room.users.values()].map((user) => ({
     username: user.username,
+    userKey: user.userKey,
     isHost: user.userKey === room.hostKey,
+    hostIsOnline,
     currentTime: normalizeTime(user.currentTime, 0),
     playbackPaused: !!user.paused,
     timeUpdatedAt: user.timeUpdatedAt || 0
@@ -118,7 +124,9 @@ function emitSyncToSocket(socket, room, userKey) {
   socket.emit('sync-state', {
     ...room.state,
     playback: getEffectivePlayback(room.state.playback),
-    isHost: room.hostKey === userKey
+    isHost: room.hostKey === userKey,
+    hostKey: room.hostKey,
+    hostIsOnline: room.hostKey ? room.users.has(room.hostKey) : false
   });
 }
 
@@ -129,7 +137,14 @@ function emitHostStatusToSocket(socket, room, userKey) {
 
 function setInitialHostIfNeeded(room, userKey) {
   if (room.hostKey) return;
+
   room.hostKey = userKey;
+  room.lastHostSeenAt = Date.now();
+}
+
+function isCurrentSocketUser(room, userKey, socketId) {
+  const user = room.users.get(userKey);
+  return !!user && user.socketId === socketId;
 }
 
 function registerRoomSockets(io) {
@@ -166,6 +181,11 @@ function registerRoomSockets(io) {
       });
 
       setInitialHostIfNeeded(room, safeUserKey);
+
+      if (room.hostKey === safeUserKey) {
+        room.lastHostSeenAt = Date.now();
+      }
+
       emitHostStatusToSocket(socket, room, safeUserKey);
       emitSyncToSocket(socket, room, safeUserKey);
       emitUsers(io, safeRoomId, room);
@@ -176,10 +196,11 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
-      const user = room.users.get(currentUserKey);
-      if (!user || user.socketId !== socket.id) return;
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
 
+      const user = room.users.get(currentUserKey);
       user.username = sanitizeUsername(username);
+
       emitUsers(io, safeRoomId, room);
     });
 
@@ -188,8 +209,9 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
+
       const user = room.users.get(currentUserKey);
-      if (!user || user.socketId !== socket.id) return;
 
       user.currentTime = normalizeTime(currentTime, user.currentTime || 0);
       user.paused = !!paused;
@@ -203,7 +225,10 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
       if (room.hostKey !== currentUserKey) return;
+
+      room.lastHostSeenAt = Date.now();
 
       room.state = {
         animeId: data.animeId ?? null,
@@ -214,7 +239,11 @@ function registerRoomSockets(io) {
         playback: EMPTY_PLAYBACK()
       };
 
-      io.to(safeRoomId).emit('video-changed', room.state);
+      io.to(safeRoomId).emit('video-changed', {
+        ...room.state,
+        hostKey: room.hostKey,
+        hostIsOnline: true
+      });
     });
 
     socket.on('player-control', (data = {}) => {
@@ -222,7 +251,10 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
       if (room.hostKey !== currentUserKey) return;
+
+      room.lastHostSeenAt = Date.now();
 
       const playback = room.state.playback || EMPTY_PLAYBACK();
 
@@ -232,8 +264,14 @@ function registerRoomSockets(io) {
 
       if (data.action === 'play') playback.paused = false;
       if (data.action === 'pause') playback.paused = true;
-      if (data.action === 'seek') playback.currentTime = normalizeTime(data.currentTime, playback.currentTime || 0);
-      if (typeof data.paused === 'boolean') playback.paused = data.paused;
+
+      if (data.action === 'seek') {
+        playback.currentTime = normalizeTime(data.currentTime, playback.currentTime || 0);
+      }
+
+      if (typeof data.paused === 'boolean') {
+        playback.paused = data.paused;
+      }
 
       playback.updatedAt = Date.now();
       room.state.playback = playback;
@@ -242,7 +280,8 @@ function registerRoomSockets(io) {
         action: data.action,
         currentTime: playback.currentTime,
         paused: playback.paused,
-        updatedAt: playback.updatedAt
+        updatedAt: playback.updatedAt,
+        hostKey: room.hostKey
       });
     });
 
@@ -251,6 +290,12 @@ function registerRoomSockets(io) {
       if (!safeRoomId || !currentUserKey) return;
 
       const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
+
+      if (room.hostKey === currentUserKey) {
+        room.lastHostSeenAt = Date.now();
+      }
+
       emitHostStatusToSocket(socket, room, currentUserKey);
       emitSyncToSocket(socket, room, currentUserKey);
     });
@@ -260,6 +305,9 @@ function registerRoomSockets(io) {
       const safeMessage = String(message || '').trim().slice(0, 300);
 
       if (!safeRoomId || !safeMessage) return;
+
+      const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
 
       io.to(safeRoomId).emit('chat-message', {
         username: sanitizeUsername(username),
@@ -282,10 +330,13 @@ function registerRoomSockets(io) {
 
       room.users.delete(currentUserKey);
 
-      // ВАЖНО:
       // Хоста больше НЕ передаём следующему пользователю.
-      // room.hostKey остаётся закреплённым за тем же userKey.
+      // hostKey остаётся закреплённым за первым создателем комнаты.
       // Если хост обновит страницу или временно выйдет, он вернётся хостом.
+      if (room.hostKey === currentUserKey) {
+        room.lastHostSeenAt = Date.now();
+      }
+
       emitUsers(io, currentRoomId, room);
 
       if (room.users.size === 0) {
