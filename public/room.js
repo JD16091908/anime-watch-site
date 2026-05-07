@@ -76,6 +76,7 @@ let lastKnownHostTimeAt = 0;
 let lastAppliedTargetTime = null;
 let lastAppliedAt = 0;
 let lastForcedSyncAt = 0;
+let hasShownFirstEpisodeHint = false;
 let audioContext = null;
 let latestRoomUsers = [];
 let usersRenderTicker = null;
@@ -585,127 +586,9 @@ function renderPlayerOverlay() {
   const playerWrapper = document.getElementById('playerWrapper');
   if (!playerWrapper) return;
 
-  const existingOverlay = playerWrapper.querySelector('.player-top-overlay');
-  if (existingOverlay) existingOverlay.remove();
-
-  if (!canControl()) return;
-  if (!currentState.embedUrl) return;
-  if (!selectedAnime?.videos?.length) return;
-
-  const context = getCurrentOverlayContext();
-  if (!context) return;
-
-  const { players, seasons, episodes, currentEpisodeNumber } = context;
-
-  const activePlayer = selectedPlayer || players[0]?.name || 'Озвучка';
-  const activeSeason = Number(selectedSeason || seasons[0]?.season || 1);
-
-  const overlay = document.createElement('div');
-  overlay.className = 'player-top-overlay';
-  overlay.innerHTML = `
-    <div class="player-overlay-controls">
-      <div class="overlay-dropdown" data-overlay-dropdown="player">
-        <button class="overlay-control-btn" type="button" data-overlay-toggle="player" title="Выбрать озвучку">
-          <span>${escapeHtml(activePlayer)}</span>
-          <span class="overlay-control-arrow">▾</span>
-        </button>
-
-        <div class="overlay-dropdown-menu">
-          ${players.map((player) => `
-            <button
-              class="overlay-dropdown-item ${player.name === activePlayer ? 'active' : ''}"
-              type="button"
-              data-overlay-player="${escapeHtml(player.name)}"
-            >
-              <span>${escapeHtml(player.name)}</span>
-              <span class="overlay-item-count">${escapeHtml(player.count)}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="overlay-dropdown" data-overlay-dropdown="season">
-        <button class="overlay-control-btn" type="button" data-overlay-toggle="season" title="Выбрать сезон">
-          <span>Сезон ${escapeHtml(activeSeason)}</span>
-          <span class="overlay-control-arrow">▾</span>
-        </button>
-
-        <div class="overlay-dropdown-menu">
-          ${seasons.map((season) => `
-            <button
-              class="overlay-dropdown-item ${season.season === activeSeason ? 'active' : ''}"
-              type="button"
-              data-overlay-season="${escapeHtml(season.season)}"
-            >
-              <span>Сезон ${escapeHtml(season.season)}</span>
-              <span class="overlay-item-count">${escapeHtml(season.count)}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-
-      <div class="overlay-dropdown" data-overlay-dropdown="episode">
-        <button class="overlay-control-btn" type="button" data-overlay-toggle="episode" title="Выбрать серию">
-          <span>Серия ${escapeHtml(currentEpisodeNumber || 1)}</span>
-          <span class="overlay-control-arrow">▾</span>
-        </button>
-
-        <div class="overlay-dropdown-menu-episodes">
-          ${episodes.map((episode) => {
-            const episodeNumber = getEpisodeNumber(episode);
-
-            return `
-              <button
-                class="overlay-dropdown-item overlay-dropdown-item-episode ${episodeNumber === currentEpisodeNumber ? 'active' : ''}"
-                type="button"
-                data-overlay-episode="${escapeHtml(episodeNumber)}"
-              >
-                ${escapeHtml(episodeNumber)}
-              </button>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-
-  overlay.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const toggle = event.target.closest('[data-overlay-toggle]');
-    if (toggle) {
-      const dropdown = toggle.closest('.overlay-dropdown');
-      const wasOpen = dropdown.classList.contains('open');
-
-      closeAllOverlayDropdowns();
-
-      if (!wasOpen) dropdown.classList.add('open');
-      return;
-    }
-
-    const playerButton = event.target.closest('[data-overlay-player]');
-    if (playerButton) {
-      const nextPlayer = playerButton.dataset.overlayPlayer;
-      selectOverlayPlayer(nextPlayer);
-      return;
-    }
-
-    const seasonButton = event.target.closest('[data-overlay-season]');
-    if (seasonButton) {
-      const nextSeason = Number(seasonButton.dataset.overlaySeason);
-      selectOverlaySeason(nextSeason);
-      return;
-    }
-
-    const episodeButton = event.target.closest('[data-overlay-episode]');
-    if (episodeButton) {
-      const nextEpisode = Number(episodeButton.dataset.overlayEpisode);
-      selectOverlayEpisode(nextEpisode);
-    }
+  playerWrapper.querySelectorAll('.player-top-overlay').forEach((overlay) => {
+    overlay.remove();
   });
-
-  playerWrapper.appendChild(overlay);
 }
 
 function selectOverlayPlayer(nextPlayer) {
@@ -1106,6 +989,13 @@ function hideViewerHintOverlay() {
   placeholderEl.style.display = 'none';
 }
 
+function showFirstEpisodeHintForHost() {
+  if (!isHost || roomId === 'solo' || hasShownFirstEpisodeHint) return;
+
+  hasShownFirstEpisodeHint = true;
+  sys('После загрузки первой серии при необходимости кликните по плееру один раз и нажмите play.');
+}
+
 function setUsersPanelOpen(nextOpen) {
   if (!usersDropdownPanel || !toggleUsersPanelBtn) return;
 
@@ -1173,6 +1063,7 @@ function loadIframe(embedUrl) {
 
   if (isHost) {
     startHostTimers();
+    showFirstEpisodeHintForHost();
   } else if (roomId !== 'solo') {
     startDriftCheck();
   }
@@ -1215,6 +1106,7 @@ function launchEpisode(episode, anime) {
 
   selectedSeason = season;
   selectedPlayer = playerName;
+  hasShownFirstEpisodeHint = false;
   userInteractedWithPlayer = true;
   pendingPlaybackApply = null;
 
@@ -1290,7 +1182,7 @@ function sortSearchResults(items, query = '') {
 
     if (scoreB !== scoreA) return scoreB - scoreA;
 
-    return String(a?.title || '').localeCompare(String(b.title || ''), 'ru');
+    return String(a?.title || '').localeCompare(String(b?.title || ''), 'ru');
   });
 }
 
