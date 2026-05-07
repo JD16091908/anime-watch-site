@@ -373,8 +373,9 @@ function getBaseItemLink(item) {
   );
 }
 
-function addEpisodeParam(link, episodeNumber) {
+function addEpisodeParams(link, seasonNumber, episodeNumber) {
   const safeLink = normalizeKodikLink(link);
+  const safeSeasonNumber = Number(seasonNumber) || 1;
   const safeEpisodeNumber = Number(episodeNumber) || 1;
 
   if (!safeLink) return null;
@@ -382,12 +383,14 @@ function addEpisodeParam(link, episodeNumber) {
   try {
     const url = new URL(safeLink);
 
+    url.searchParams.set('season', String(safeSeasonNumber));
     url.searchParams.set('episode', String(safeEpisodeNumber));
 
     return url.toString();
   } catch {
     const separator = safeLink.includes('?') ? '&' : '?';
-    return `${safeLink}${separator}episode=${encodeURIComponent(String(safeEpisodeNumber))}`;
+
+    return `${safeLink}${separator}season=${encodeURIComponent(String(safeSeasonNumber))}&episode=${encodeURIComponent(String(safeEpisodeNumber))}`;
   }
 }
 
@@ -413,11 +416,11 @@ function extractEpisodeLink(data) {
   );
 }
 
-function getPreferredEpisodeLink(item, episodeData, episodeNumber) {
+function getPreferredEpisodeLink(item, episodeData, seasonNumber, episodeNumber) {
   const baseLink = getBaseItemLink(item);
   const episodeLink = extractEpisodeLink(episodeData);
 
-  return addEpisodeParam(baseLink, episodeNumber) || episodeLink;
+  return addEpisodeParams(episodeLink || baseLink, seasonNumber, episodeNumber);
 }
 
 function buildEpisode({
@@ -461,7 +464,7 @@ function extractEpisodesFromEpisodesObject(item) {
       Number(episodeData?.episode_number) ||
       1;
 
-    const iframeUrl = getPreferredEpisodeLink(item, episodeData, episodeNumber);
+    const iframeUrl = getPreferredEpisodeLink(item, episodeData, seasonNumber, episodeNumber);
 
     if (!iframeUrl) continue;
 
@@ -518,7 +521,7 @@ function extractEpisodesFromSeasonsObject(item) {
         Number(episodeData?.episode_number) ||
         1;
 
-      const iframeUrl = getPreferredEpisodeLink(item, episodeData, episodeNumber);
+      const iframeUrl = getPreferredEpisodeLink(item, episodeData, seasonNumber, episodeNumber);
 
       if (!iframeUrl) continue;
 
@@ -539,12 +542,15 @@ function extractSingleVideo(item) {
 
   if (!link) return [];
 
+  const seasonNumber = getSeasonNumberFromItem(item, 1);
+  const episodeNumber = 1;
+
   return [
     buildEpisode({
       item,
-      seasonNumber: getSeasonNumberFromItem(item, 1),
-      episodeNumber: 1,
-      iframeUrl: addEpisodeParam(link, 1) || link
+      seasonNumber,
+      episodeNumber,
+      iframeUrl: addEpisodeParams(link, seasonNumber, episodeNumber)
     })
   ];
 }
