@@ -15,15 +15,15 @@ const roomId = decodeURIComponent(window.location.pathname.split('/room/')[1] ||
 const SEARCH_ENDPOINTS = ['/api/kodik/search', '/api/yummy/search'];
 const SELECT_ENDPOINTS = ['/api/kodik/anime/by-selection', '/api/yummy/anime/by-selection'];
 
-const SYNC_TOLERANCE_SEC = 1.35;
-const SYNC_HARD_SEEK_SEC = 4.5;
-const SYNC_DRIFT_INTERVAL = 1500;
-const SYNC_SEEK_COOLDOWN = 1400;
-const HOST_BROADCAST_INTERVAL = 700;
+const SYNC_TOLERANCE_SEC = 0.9;
+const SYNC_HARD_SEEK_SEC = 2.8;
+const SYNC_DRIFT_INTERVAL = 900;
+const SYNC_SEEK_COOLDOWN = 900;
+const HOST_BROADCAST_INTERVAL = 500;
 const USER_TIME_INTERVAL = 1000;
 const USER_TIME_STALE_MS = 15000;
-const RESYNC_AFTER_IFRAME_MS = 1200;
-const REQUEST_SYNC_INTERVAL = 7000;
+const RESYNC_AFTER_IFRAME_MS = 900;
+const REQUEST_SYNC_INTERVAL = 5000;
 
 const USER_KEY_STORAGE = 'anivmeste_user_key';
 const USERNAME_STORAGE = 'username';
@@ -74,7 +74,6 @@ let lastKnownHostTimeAt = 0;
 let lastAppliedTargetTime = null;
 let lastAppliedAt = 0;
 let lastForcedSyncAt = 0;
-let hasShownFirstEpisodeHint = false;
 let audioContext = null;
 let latestRoomUsers = [];
 let usersRenderTicker = null;
@@ -87,6 +86,11 @@ let lastUserTimeEmitAtClient = 0;
 let currentLoadedEmbedUrl = null;
 let roomSupportCloseTimer = null;
 let isUsersPanelOpen = false;
+let adLockActive = false;
+let adLockUsersCount = 0;
+let localAdvertisementActive = false;
+let lastHostControlEmitAt = 0;
+let lastHostControlSignature = '';
 
 const userKey = getOrCreateUserKey();
 
@@ -595,7 +599,7 @@ function applyPlaybackState(playback, { force = false, reason = 'sync' } = {}) {
     }
   }
 
-  if (normalized.paused) {
+  if (normalized.paused || adLockActive) {
     try {
       window.PlayerModule.pause();
     } catch {}
@@ -607,7 +611,7 @@ function applyPlaybackState(playback, { force = false, reason = 'sync' } = {}) {
 
   if (reason !== 'local') {
     currentState.playback = {
-      paused: normalized.paused,
+      paused: normalized.paused || adLockActive,
       currentTime: targetTime !== null ? targetTime : normalized.currentTime,
       updatedAt: Date.now()
     };
@@ -618,6 +622,7 @@ function checkDrift() {
   if (isHost || roomId === 'solo') return;
   if (!currentState.embedUrl) return;
   if (currentState.playback.paused) return;
+  if (adLockActive) return;
 
   const hostTime = getInterpolatedHostTime();
   if (hostTime === null) return;
@@ -711,9 +716,39 @@ function emitCurrentUserTime({ force = false } = {}) {
     socket.emit('update-user-time', {
       roomId,
       currentTime: ct,
-      paused: !!currentState.playback.paused
+      paused: !!currentState.playback.paused || adLockActive
     });
   }
+}
+
+function emitHostControl(action, currentTime, options = {}) {
+  if (!isHost || roomId === 'solo') return;
+  if (!currentState.embedUrl) return;
+
+  const safeTime = typeof currentTime === 'number' && Number.isFinite(currentTime)
+    ? currentTime
+    : getPlayerActualTimeFallback();
+
+  const rounded = Math.round((safeTime || 0) * 10) / 10;
+  const signature = `${action}:${rounded}:${!!options.paused}`;
+  const now = Date.now();
+
+  if (action !== 'timeupdate') {
+    lastHostControlSignature = signature;
+    lastHostControlEmitAt = now;
+  } else if (signature === lastHostControlSignature && now - lastHostControlEmitAt < 350) {
+    return;
+  }
+
+  lastHostControlSignature = signature;
+  lastHostControlEmitAt = now;
+
+  socket.emit('player-control', {
+    roomId,
+    action,
+    currentTime: safeTime,
+    paused: options.paused
+  });
 }
 
 function startHostTimers() {
@@ -727,10 +762,8 @@ function startHostTimers() {
     const ct = updateLocalPlaybackTimeFromPlayer();
 
     if (typeof ct === 'number' && ct >= 0) {
-      socket.emit('player-control', {
-        roomId,
-        action: 'timeupdate',
-        currentTime: ct
+      emitHostControl('timeupdate', ct, {
+        paused: !!currentState.playback.paused || adLockActive
       });
 
       emitCurrentUserTime({ force: true });
@@ -861,7 +894,7 @@ function showBlockedAnimeMessage(message = 'Данное аниме запрещ
   showPlaceholderUi('Просмотр недоступен', message);
 }
 
-function showViewerHint(text = 'Если видео не стартовало автоматически, кликните по плееру один раз.') {
+function showViewerHint(text = 'Если серия не стартовала, нажмите по плееру один раз.') {
   if (isHost || roomId === 'solo') return;
   sys(text);
 }
@@ -875,13 +908,6 @@ function hideViewerHintOverlay() {
   if (!placeholderEl.classList.contains('placeholder-click-through')) return;
 
   placeholderEl.style.display = 'none';
-}
-
-function showFirstEpisodeHintForHost() {
-  if (!isHost || roomId === 'solo' || hasShownFirstEpisodeHint) return;
-
-  hasShownFirstEpisodeHint = true;
-  sys('После загрузки первой серии при необходимости кликните по плееру один раз и нажмите play.');
 }
 
 function setUsersPanelOpen(nextOpen) {
@@ -925,6 +951,7 @@ function loadIframe(embedUrl) {
   lastAppliedAt = 0;
   lastForcedSyncAt = 0;
   lastUserTimeEmitAtClient = 0;
+  localAdvertisementActive = false;
 
   window.PlayerModule.mountIframe(playerWrapper, {
     src: embedUrl,
@@ -944,33 +971,24 @@ function loadIframe(embedUrl) {
     ? window.PlayerModule.detectPlayerType(embedUrl)
     : 'unknown';
 
-  if (!isHost && roomId !== 'solo') {
-    setTimeout(() => {
-      try {
-        window.PlayerModule.pause();
-      } catch {}
-    }, 200);
-  }
-
   startUserTimeTimer();
 
   if (isHost) {
     startHostTimers();
-    showFirstEpisodeHintForHost();
   } else if (roomId !== 'solo') {
     startDriftCheck();
+
+    setTimeout(() => {
+      socket.emit('request-sync', { roomId });
+    }, RESYNC_AFTER_IFRAME_MS);
   }
 
   if (!isHost && roomId !== 'solo') {
     setTimeout(() => {
       if (!userInteractedWithPlayer) {
-        showViewerHint('Если серия не стартовала, нажмите по плееру один раз.');
+        showViewerHint();
       }
-    }, 800);
-
-    setTimeout(() => {
-      socket.emit('request-sync', { roomId });
-    }, RESYNC_AFTER_IFRAME_MS);
+    }, 1200);
   }
 }
 
@@ -997,9 +1015,10 @@ function launchEpisode(episode, anime) {
     }
   };
 
-  hasShownFirstEpisodeHint = false;
   userInteractedWithPlayer = true;
   pendingPlaybackApply = null;
+  adLockActive = false;
+  adLockUsersCount = 0;
 
   loadIframe(embedUrl);
 
@@ -1015,6 +1034,38 @@ function launchEpisode(episode, anime) {
   } else {
     sys(`Вы выбрали: ${title}`);
   }
+}
+
+function handleHostInternalVideoChange(change = {}) {
+  if (!isHost || roomId === 'solo') return;
+
+  const newUrl = change.newUrl || change.link || change.url;
+  if (!newUrl) return;
+
+  const episodeNumber = Number(change.episode || change.episodeNumber || currentState.episodeNumber || 1);
+  const nextTitle = currentState.title || 'Аниме';
+
+  currentState = {
+    ...currentState,
+    episodeNumber,
+    embedUrl: newUrl,
+    playback: {
+      paused: true,
+      currentTime: 0,
+      updatedAt: Date.now()
+    }
+  };
+
+  currentLoadedEmbedUrl = newUrl;
+
+  socket.emit('change-video', {
+    roomId,
+    embedUrl: newUrl,
+    title: nextTitle,
+    animeId: currentState.animeId,
+    animeUrl: currentState.animeUrl,
+    episodeNumber
+  });
 }
 
 function extractTbIndex(title) {
@@ -1479,7 +1530,7 @@ function renderUsers(users) {
     const timeText = formatWatchTime(displayTime);
     const lastUpdateAt = Number(user?.timeUpdatedAt || 0);
     const isFresh = lastUpdateAt > 0 && (Date.now() - lastUpdateAt) <= USER_TIME_STALE_MS;
-    const isLive = !user?.playbackPaused && isFresh;
+    const isLive = !user?.playbackPaused && isFresh && !user?.inAdvertisement;
     const userName = String(user?.username || 'Гость').trim() || 'Гость';
     const avatarLetter = userName.charAt(0).toUpperCase();
 
@@ -1504,7 +1555,7 @@ function renderUsers(users) {
 
           <div class="user-subline">
             <span class="user-watch-state ${isLive ? 'is-live' : 'is-paused'}">
-              ${isLive ? 'Смотрит сейчас' : 'На паузе'}
+              ${user.inAdvertisement ? 'Реклама' : isLive ? 'Смотрит сейчас' : 'На паузе'}
             </span>
           </div>
         </div>
@@ -1533,6 +1584,10 @@ function initializeRoomSupportModal() {
 }
 
 function bindPlayerEvents() {
+  if (window.PlayerModule && typeof window.PlayerModule.onVideoChanged === 'function') {
+    window.PlayerModule.onVideoChanged(handleHostInternalVideoChange);
+  }
+
   window.addEventListener('player:time-update', (event) => {
     const seconds = event.detail?.time;
     if (typeof seconds !== 'number' || Number.isNaN(seconds) || seconds < 0) return;
@@ -1566,10 +1621,8 @@ function bindPlayerEvents() {
 
     if (!isHost || roomId === 'solo') return;
 
-    socket.emit('player-control', {
-      roomId,
-      action: 'play',
-      currentTime: currentState.playback.currentTime
+    emitHostControl('play', currentState.playback.currentTime, {
+      paused: false
     });
   });
 
@@ -1584,10 +1637,8 @@ function bindPlayerEvents() {
 
     if (!isHost || roomId === 'solo') return;
 
-    socket.emit('player-control', {
-      roomId,
-      action: 'pause',
-      currentTime: currentState.playback.currentTime
+    emitHostControl('pause', currentState.playback.currentTime, {
+      paused: true
     });
   });
 
@@ -1605,6 +1656,28 @@ function bindPlayerEvents() {
     currentState.playback.updatedAt = Date.now();
 
     emitCurrentUserTime({ force: true });
+  });
+
+  window.addEventListener('player:advertisement-started', () => {
+    if (roomId === 'solo' || localAdvertisementActive) return;
+
+    localAdvertisementActive = true;
+
+    socket.emit('viewer-ad-state', {
+      roomId,
+      inAdvertisement: true
+    });
+  });
+
+  window.addEventListener('player:advertisement-ended', () => {
+    if (roomId === 'solo' || !localAdvertisementActive) return;
+
+    localAdvertisementActive = false;
+
+    socket.emit('viewer-ad-state', {
+      roomId,
+      inAdvertisement: false
+    });
   });
 }
 
@@ -1667,6 +1740,8 @@ function bindSocketEvents() {
     const nextEmbedUrl = state.embedUrl ?? null;
 
     isHost = !!state.isHost;
+    adLockActive = !!state.adLock;
+    adLockUsersCount = Number(state.adUsersCount || 0);
 
     if (window.PlayerModule) {
       window.PlayerModule.setHostState(isHost);
@@ -1687,7 +1762,10 @@ function bindSocketEvents() {
       embedUrl: nextEmbedUrl,
       title: state.title ?? null,
       duration: currentState.duration || 0,
-      playback
+      playback: {
+        ...playback,
+        paused: playback.paused || adLockActive
+      }
     };
 
     if (typeof playback.currentTime === 'number') {
@@ -1699,7 +1777,7 @@ function bindSocketEvents() {
       if (currentLoadedEmbedUrl !== nextEmbedUrl) {
         loadIframe(nextEmbedUrl);
 
-        pendingPlaybackApply = playback;
+        pendingPlaybackApply = currentState.playback;
 
         setTimeout(() => {
           if (pendingPlaybackApply) {
@@ -1713,7 +1791,7 @@ function bindSocketEvents() {
         }, 900);
       } else {
         if (!isHost) {
-          applyPlaybackState(playback, {
+          applyPlaybackState(currentState.playback, {
             force: false,
             reason: 'sync-state-same-video'
           });
@@ -1736,6 +1814,9 @@ function bindSocketEvents() {
   socket.on('video-changed', (state) => {
     const nextEmbedUrl = state.embedUrl ?? null;
 
+    adLockActive = !!state.adLock;
+    adLockUsersCount = Number(state.adUsersCount || 0);
+
     const playback = normalizePlaybackFromServer(state.playback) || {
       paused: true,
       currentTime: 0,
@@ -1749,18 +1830,21 @@ function bindSocketEvents() {
       embedUrl: nextEmbedUrl,
       title: state.title ?? null,
       duration: 0,
-      playback
+      playback: {
+        ...playback,
+        paused: playback.paused || adLockActive
+      }
     };
 
     if (nextEmbedUrl) {
       if (currentLoadedEmbedUrl !== nextEmbedUrl) {
         loadIframe(nextEmbedUrl);
-        pendingPlaybackApply = playback;
+        pendingPlaybackApply = currentState.playback;
       } else {
         pendingPlaybackApply = null;
 
         if (!isHost) {
-          applyPlaybackState(playback, {
+          applyPlaybackState(currentState.playback, {
             force: true,
             reason: 'video-changed-same-video'
           });
@@ -1781,7 +1865,7 @@ function bindSocketEvents() {
   });
 
   socket.on('player-control', ({ action, currentTime, paused, updatedAt }) => {
-    if (roomId === 'solo' || isHost) return;
+    if (roomId === 'solo') return;
 
     const safeTime = typeof currentTime === 'number' && !Number.isNaN(currentTime)
       ? currentTime
@@ -1793,10 +1877,15 @@ function bindSocketEvents() {
     lastKnownHostTimeAt = Date.now();
 
     currentState.playback = {
-      paused: newPaused,
+      paused: newPaused || adLockActive,
       currentTime: safeTime ?? 0,
       updatedAt: Number(updatedAt || Date.now()) || Date.now()
     };
+
+    if (isHost && action === 'timeupdate') {
+      emitCurrentUserTime();
+      return;
+    }
 
     if (action === 'timeupdate') {
       checkDrift();
@@ -1804,7 +1893,7 @@ function bindSocketEvents() {
       return;
     }
 
-    if (action === 'play' || action === 'pause') {
+    if (action === 'play' || action === 'pause' || action === 'seek') {
       applyPlaybackState(currentState.playback, {
         force: true,
         reason: action
@@ -1813,15 +1902,35 @@ function bindSocketEvents() {
       lastAppliedAt = Date.now();
       lastAppliedTargetTime = safeTime;
       lastForcedSyncAt = Date.now();
-    } else if (action === 'seek') {
-      applyPlaybackState(currentState.playback, {
-        force: true,
-        reason: 'seek'
-      });
+    }
+  });
 
-      lastAppliedAt = Date.now();
-      lastAppliedTargetTime = safeTime;
-      lastForcedSyncAt = Date.now();
+  socket.on('room-ad-lock', ({ active, adUsersCount, playback }) => {
+    adLockActive = !!active;
+    adLockUsersCount = Number(adUsersCount || 0);
+
+    const normalized = normalizePlaybackFromServer(playback);
+
+    if (normalized) {
+      currentState.playback = {
+        ...normalized,
+        paused: normalized.paused || adLockActive
+      };
+    }
+
+    if (adLockActive) {
+      try {
+        window.PlayerModule?.pause();
+      } catch {}
+
+      return;
+    }
+
+    if (normalized && !normalized.paused) {
+      applyPlaybackState(normalized, {
+        force: true,
+        reason: 'ad-lock-ended'
+      });
     }
   });
 
@@ -1993,6 +2102,13 @@ function bindUiEvents() {
   }
 
   window.addEventListener('beforeunload', () => {
+    if (localAdvertisementActive && roomId !== 'solo') {
+      socket.emit('viewer-ad-state', {
+        roomId,
+        inAdvertisement: false
+      });
+    }
+
     stopHostTimers();
     stopUserTimeTimer();
     stopDriftCheck();
