@@ -14,6 +14,7 @@ window.PlayerModule = (() => {
   let lastKnownPaused = true;
 
   let pollingTimer = null;
+  let advertisementActive = false;
 
   function normalizeUrl(url) {
     const value = String(url || '').trim();
@@ -95,7 +96,7 @@ window.PlayerModule = (() => {
     pollingTimer = setInterval(() => {
       if (!currentIframe) return;
       requestTime();
-    }, 1000);
+    }, 700);
   }
 
   function stopPolling() {
@@ -127,6 +128,8 @@ window.PlayerModule = (() => {
     flushCommandQueue();
     requestTime();
     startPolling();
+
+    window.dispatchEvent(new CustomEvent('player:ready'));
   }
 
   function resetState() {
@@ -136,6 +139,7 @@ window.PlayerModule = (() => {
     lastKnownDuration = 0;
     lastKnownTimeAt = 0;
     lastKnownPaused = true;
+    advertisementActive = false;
 
     if (playerReadyTimer) {
       clearTimeout(playerReadyTimer);
@@ -174,6 +178,7 @@ window.PlayerModule = (() => {
       setTimeout(markReady, 700);
       setTimeout(requestTime, 1200);
       setTimeout(requestTime, 2200);
+      setTimeout(requestTime, 3600);
     });
 
     playerReadyTimer = setTimeout(markReady, 2600);
@@ -354,7 +359,7 @@ window.PlayerModule = (() => {
   }
 
   function getEventName(data) {
-    return data?.event || data?.type || data?.method || data?.name || data?.key || '';
+    return String(data?.event || data?.type || data?.method || data?.name || data?.key || '').trim();
   }
 
   function getPayload(data) {
@@ -382,6 +387,77 @@ window.PlayerModule = (() => {
     }));
   }
 
+  function markAdvertisementStarted(payload = {}) {
+    if (advertisementActive) return;
+
+    advertisementActive = true;
+
+    window.dispatchEvent(new CustomEvent('player:advertisement-started', {
+      detail: payload
+    }));
+  }
+
+  function markAdvertisementEnded(payload = {}) {
+    if (!advertisementActive) return;
+
+    advertisementActive = false;
+
+    window.dispatchEvent(new CustomEvent('player:advertisement-ended', {
+      detail: payload
+    }));
+  }
+
+  function isAdvertisementStartEvent(eventName) {
+    const value = String(eventName || '').toLowerCase();
+
+    return (
+      value === 'advertisement:start' ||
+      value === 'advertisement:started' ||
+      value === 'advertisement_start' ||
+      value === 'advertisement_started' ||
+      value === 'ad:start' ||
+      value === 'ad:started' ||
+      value === 'ads:start' ||
+      value === 'ads:started' ||
+      value === 'vast:start' ||
+      value === 'vast:started' ||
+      value === 'preroll:start' ||
+      value === 'preroll:started'
+    );
+  }
+
+  function isAdvertisementEndEvent(eventName) {
+    const value = String(eventName || '').toLowerCase();
+
+    return (
+      value === 'advertisement:end' ||
+      value === 'advertisement:ended' ||
+      value === 'advertisement_end' ||
+      value === 'advertisement_ended' ||
+      value === 'ad:end' ||
+      value === 'ad:ended' ||
+      value === 'ads:end' ||
+      value === 'ads:ended' ||
+      value === 'vast:end' ||
+      value === 'vast:ended' ||
+      value === 'preroll:end' ||
+      value === 'preroll:ended'
+    );
+  }
+
+  function getLinkFromPayload(payload) {
+    return (
+      payload?.link ||
+      payload?.url ||
+      payload?.iframe_url ||
+      payload?.iframeUrl ||
+      payload?.src ||
+      payload?.player_link ||
+      payload?.playerLink ||
+      null
+    );
+  }
+
   window.addEventListener('message', (event) => {
     if (!currentIframe || event.source !== currentIframe.contentWindow) return;
 
@@ -398,6 +474,16 @@ window.PlayerModule = (() => {
       eventName === 'kodik_player_ready'
     ) {
       markReady();
+      return;
+    }
+
+    if (isAdvertisementStartEvent(eventName)) {
+      markAdvertisementStarted(payload);
+      return;
+    }
+
+    if (isAdvertisementEndEvent(eventName)) {
+      markAdvertisementEnded(payload);
       return;
     }
 
@@ -491,35 +577,41 @@ window.PlayerModule = (() => {
       return;
     }
 
-    if (eventName === 'change:episode') {
+    if (
+      eventName === 'change:episode' ||
+      eventName === 'episode:change' ||
+      eventName === 'episode_changed' ||
+      eventName === 'changeEpisode'
+    ) {
+      const newUrl = getLinkFromPayload(payload);
+
       if (isHost && onVideoChangedCallback) {
         onVideoChangedCallback({
           type: 'episode',
           season: payload.season,
-          episode: payload.episode,
-          newUrl: payload.link
+          episode: payload.episode || payload.number || payload.episode_number,
+          newUrl
         });
-      }
-
-      if (!isHost) {
-        setTimeout(() => sendKodikCommand('setEpisode', payload, true), 10);
       }
 
       return;
     }
 
-    if (eventName === 'change:translation') {
+    if (
+      eventName === 'change:translation' ||
+      eventName === 'translation:change' ||
+      eventName === 'translation_changed' ||
+      eventName === 'changeTranslation'
+    ) {
+      const newUrl = getLinkFromPayload(payload);
+
       if (isHost && onVideoChangedCallback) {
         onVideoChangedCallback({
           type: 'translation',
-          translationId: payload.id,
-          translationTitle: payload.title,
-          newUrl: payload.link
+          translationId: payload.id || payload.translation_id,
+          translationTitle: payload.title || payload.name,
+          newUrl
         });
-      }
-
-      if (!isHost) {
-        setTimeout(() => sendKodikCommand('setTranslation', payload, true), 10);
       }
 
       return;
@@ -532,11 +624,6 @@ window.PlayerModule = (() => {
     ) {
       lastKnownPaused = true;
       if (onEndedCallback) onEndedCallback();
-      return;
-    }
-
-    if (eventName === 'advertisement:end') {
-      window.dispatchEvent(new CustomEvent('player:advertisement-ended'));
     }
   });
 

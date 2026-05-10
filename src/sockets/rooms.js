@@ -1,5 +1,14 @@
 const rooms = new Map();
-// roomId -> { users: Map(userKey -> user), hostKey, state, cleanupTimer, createdAt, lastHostSeenAt }
+// roomId -> {
+//   users: Map(userKey -> user),
+//   hostKey,
+//   state,
+//   cleanupTimer,
+//   createdAt,
+//   lastHostSeenAt,
+//   adUsers: Set(userKey),
+//   resumeAfterAds
+// }
 
 const ROOM_EMPTY_TTL_MS = 30 * 60 * 1000;
 
@@ -69,7 +78,9 @@ function getRoom(roomId) {
       state: createEmptyState(),
       cleanupTimer: null,
       createdAt: Date.now(),
-      lastHostSeenAt: 0
+      lastHostSeenAt: 0,
+      adUsers: new Set(),
+      resumeAfterAds: false
     });
   }
 
@@ -102,6 +113,18 @@ function getEffectivePlayback(playback) {
   };
 }
 
+function setRoomPlayback(room, playbackPatch = {}) {
+  const current = getEffectivePlayback(room.state.playback);
+
+  room.state.playback = {
+    paused: typeof playbackPatch.paused === 'boolean' ? playbackPatch.paused : current.paused,
+    currentTime: normalizeTime(playbackPatch.currentTime, current.currentTime),
+    updatedAt: Date.now()
+  };
+
+  return room.state.playback;
+}
+
 function buildUsersList(room) {
   const hostIsOnline = room.hostKey ? room.users.has(room.hostKey) : false;
 
@@ -112,7 +135,8 @@ function buildUsersList(room) {
     hostIsOnline,
     currentTime: normalizeTime(user.currentTime, 0),
     playbackPaused: !!user.paused,
-    timeUpdatedAt: user.timeUpdatedAt || 0
+    timeUpdatedAt: user.timeUpdatedAt || 0,
+    inAdvertisement: room.adUsers.has(user.userKey)
   }));
 }
 
@@ -126,7 +150,9 @@ function emitSyncToSocket(socket, room, userKey) {
     playback: getEffectivePlayback(room.state.playback),
     isHost: room.hostKey === userKey,
     hostKey: room.hostKey,
-    hostIsOnline: room.hostKey ? room.users.has(room.hostKey) : false
+    hostIsOnline: room.hostKey ? room.users.has(room.hostKey) : false,
+    adLock: room.adUsers.size > 0,
+    adUsersCount: room.adUsers.size
   });
 }
 
@@ -145,6 +171,83 @@ function setInitialHostIfNeeded(room, userKey) {
 function isCurrentSocketUser(room, userKey, socketId) {
   const user = room.users.get(userKey);
   return !!user && user.socketId === socketId;
+}
+
+function emitPlaybackToRoom(io, roomId, room, action) {
+  const playback = getEffectivePlayback(room.state.playback);
+
+  io.to(roomId).emit('player-control', {
+    action,
+    currentTime: playback.currentTime,
+    paused: playback.paused,
+    updatedAt: playback.updatedAt,
+    hostKey: room.hostKey
+  });
+}
+
+function handleAdvertisementState(io, roomId, room, userKey, inAdvertisement) {
+  if (inAdvertisement) {
+    if (!room.adUsers.has(userKey)) {
+      room.adUsers.add(userKey);
+    }
+
+    const playback = getEffectivePlayback(room.state.playback);
+
+    if (!playback.paused) {
+      room.resumeAfterAds = true;
+      setRoomPlayback(room, {
+        paused: true,
+        currentTime: playback.currentTime
+      });
+    }
+
+    io.to(roomId).emit('room-ad-lock', {
+      active: true,
+      adUsersCount: room.adUsers.size,
+      playback: getEffectivePlayback(room.state.playback)
+    });
+
+    emitPlaybackToRoom(io, roomId, room, 'pause');
+    emitUsers(io, roomId, room);
+    return;
+  }
+
+  if (room.adUsers.has(userKey)) {
+    room.adUsers.delete(userKey);
+  }
+
+  if (room.adUsers.size > 0) {
+    io.to(roomId).emit('room-ad-lock', {
+      active: true,
+      adUsersCount: room.adUsers.size,
+      playback: getEffectivePlayback(room.state.playback)
+    });
+
+    emitUsers(io, roomId, room);
+    return;
+  }
+
+  const shouldResume = room.resumeAfterAds;
+  room.resumeAfterAds = false;
+
+  io.to(roomId).emit('room-ad-lock', {
+    active: false,
+    adUsersCount: 0,
+    playback: getEffectivePlayback(room.state.playback)
+  });
+
+  if (shouldResume) {
+    const playback = getEffectivePlayback(room.state.playback);
+
+    setRoomPlayback(room, {
+      paused: false,
+      currentTime: playback.currentTime
+    });
+
+    emitPlaybackToRoom(io, roomId, room, 'play');
+  }
+
+  emitUsers(io, roomId, room);
 }
 
 function registerRoomSockets(io) {
@@ -229,6 +332,8 @@ function registerRoomSockets(io) {
       if (room.hostKey !== currentUserKey) return;
 
       room.lastHostSeenAt = Date.now();
+      room.adUsers.clear();
+      room.resumeAfterAds = false;
 
       room.state = {
         animeId: data.animeId ?? null,
@@ -242,8 +347,12 @@ function registerRoomSockets(io) {
       io.to(safeRoomId).emit('video-changed', {
         ...room.state,
         hostKey: room.hostKey,
-        hostIsOnline: true
+        hostIsOnline: true,
+        adLock: false,
+        adUsersCount: 0
       });
+
+      emitUsers(io, safeRoomId, room);
     });
 
     socket.on('player-control', (data = {}) => {
@@ -256,33 +365,57 @@ function registerRoomSockets(io) {
 
       room.lastHostSeenAt = Date.now();
 
-      const playback = room.state.playback || EMPTY_PLAYBACK();
+      const currentPlayback = getEffectivePlayback(room.state.playback);
+      const currentTime = typeof data.currentTime === 'number' && !Number.isNaN(data.currentTime)
+        ? normalizeTime(data.currentTime, currentPlayback.currentTime)
+        : currentPlayback.currentTime;
 
-      if (typeof data.currentTime === 'number' && !Number.isNaN(data.currentTime)) {
-        playback.currentTime = normalizeTime(data.currentTime, playback.currentTime || 0);
+      if (room.adUsers.size > 0 && data.action === 'play') {
+        room.resumeAfterAds = true;
+
+        const playback = setRoomPlayback(room, {
+          paused: true,
+          currentTime
+        });
+
+        io.to(safeRoomId).emit('room-ad-lock', {
+          active: true,
+          adUsersCount: room.adUsers.size,
+          playback
+        });
+
+        emitPlaybackToRoom(io, safeRoomId, room, 'pause');
+        return;
       }
 
-      if (data.action === 'play') playback.paused = false;
-      if (data.action === 'pause') playback.paused = true;
+      let paused = currentPlayback.paused;
 
-      if (data.action === 'seek') {
-        playback.currentTime = normalizeTime(data.currentTime, playback.currentTime || 0);
-      }
+      if (data.action === 'play') paused = false;
+      if (data.action === 'pause') paused = true;
+      if (typeof data.paused === 'boolean') paused = data.paused;
 
-      if (typeof data.paused === 'boolean') {
-        playback.paused = data.paused;
-      }
+      const playback = setRoomPlayback(room, {
+        paused,
+        currentTime
+      });
 
-      playback.updatedAt = Date.now();
-      room.state.playback = playback;
-
-      socket.to(safeRoomId).emit('player-control', {
+      io.to(safeRoomId).emit('player-control', {
         action: data.action,
         currentTime: playback.currentTime,
         paused: playback.paused,
         updatedAt: playback.updatedAt,
         hostKey: room.hostKey
       });
+    });
+
+    socket.on('viewer-ad-state', ({ roomId, inAdvertisement }) => {
+      const safeRoomId = sanitizeRoomId(roomId);
+      if (!safeRoomId || !currentUserKey) return;
+
+      const room = getRoom(safeRoomId);
+      if (!isCurrentSocketUser(room, currentUserKey, socket.id)) return;
+
+      handleAdvertisementState(io, safeRoomId, room, currentUserKey, !!inAdvertisement);
     });
 
     socket.on('request-sync', ({ roomId }) => {
@@ -329,12 +462,23 @@ function registerRoomSockets(io) {
       if (!user || user.socketId !== socket.id) return;
 
       room.users.delete(currentUserKey);
+      room.adUsers.delete(currentUserKey);
 
-      // Хоста больше НЕ передаём следующему пользователю.
-      // hostKey остаётся закреплённым за первым создателем комнаты.
-      // Если хост обновит страницу или временно выйдет, он вернётся хостом.
       if (room.hostKey === currentUserKey) {
         room.lastHostSeenAt = Date.now();
+      }
+
+      if (room.adUsers.size === 0 && room.resumeAfterAds && room.users.size > 0) {
+        room.resumeAfterAds = false;
+
+        const playback = getEffectivePlayback(room.state.playback);
+
+        setRoomPlayback(room, {
+          paused: false,
+          currentTime: playback.currentTime
+        });
+
+        emitPlaybackToRoom(io, currentRoomId, room, 'play');
       }
 
       emitUsers(io, currentRoomId, room);
