@@ -1,9 +1,8 @@
 User-agent: *
-Allow: /
-
 Disallow: /api/
 Disallow: /room/
 Disallow: /room.html
 Disallow: /anime/
+Allow: /
 
 Sitemap: https://anivmeste.ru/sitemap.xml

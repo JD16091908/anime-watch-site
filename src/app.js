@@ -14,6 +14,54 @@ const app = express();
 
 app.set('trust proxy', 1);
 
+function isProductionRequest(req) {
+  return process.env.NODE_ENV === 'production' || Boolean(req.headers['x-forwarded-proto']);
+}
+
+function getRequestProtocol(req) {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+
+  if (forwardedProto) {
+    return forwardedProto;
+  }
+
+  return req.protocol;
+}
+
+function getRequestHost(req) {
+  return String(req.headers.host || '').toLowerCase();
+}
+
+function shouldRedirectToCanonicalHost(req) {
+  if (!isProductionRequest(req)) {
+    return false;
+  }
+
+  const host = getRequestHost(req);
+  const protocol = getRequestProtocol(req);
+
+  if (!host) {
+    return false;
+  }
+
+  if (host === 'localhost:3000' || host.startsWith('127.0.0.1')) {
+    return false;
+  }
+
+  return protocol !== 'https' || host !== 'anivmeste.ru';
+}
+
+function redirectToCanonicalHost(req, res, next) {
+  if (!shouldRedirectToCanonicalHost(req)) {
+    return next();
+  }
+
+  const targetUrl = `https://anivmeste.ru${req.originalUrl || '/'}`;
+  return res.redirect(301, targetUrl);
+}
+
+app.use(redirectToCanonicalHost);
+
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     const origin = req.headers.origin;
@@ -51,6 +99,18 @@ const apiLimiter = rateLimit({
 
 app.use(globalLimiter);
 app.use('/api', apiLimiter);
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.sendFile(path.join(__dirname, '../public/robots.txt'));
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.sendFile(path.join(__dirname, '../public/sitemap.xml'));
+});
 
 app.use(express.static(path.join(__dirname, '../public'), {
   extensions: false,
@@ -154,15 +214,17 @@ app.get(/^\/anime(?:\/.*)?$/, (req, res) => {
 });
 
 app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
   return res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 app.get('/support', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
   return res.sendFile(path.join(__dirname, '../public/support.html'));
 });
 
 app.get('/support.html', (req, res) => {
-  return res.sendFile(path.join(__dirname, '../public/support.html'));
+  return res.redirect(301, '/support');
 });
 
 app.use('/api', (req, res) => {
@@ -174,6 +236,9 @@ app.use('/api', (req, res) => {
 });
 
 app.use((req, res) => {
+  res.status(404);
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Cache-Control', 'no-store');
   return res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
