@@ -7,6 +7,6 @@ window.AnivmesteConfig = {
     thanksText: 'Любая поддержка помогает оплачивать инфраструктуру, дорабатывать интерфейс и развивать новые функции сервиса.'
   },
   contacts: {
-    email: 'support@anivmeste.ru'
+    email: 'support.anismeste@gmail.com'
   }
 };
